@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - task: default_task_16
+  - task: default_task_14_joint
 
 name: robot_${task.name}
 _target_: diffusion_policy.workspace.robotworkspace.RobotWorkspace
@@ -18,10 +18,10 @@ past_action_visible: False
 keypoint_visible_rate: 1.0
 obs_as_global_cond: True
 
-mode: eef
+mode: joint
 
 policy:
-  _target_: diffusion_policy.policy.diffusion_unet_image_policy.DiffusionUnetImagePolicy
+  _target_: diffusion_policy.policy.diffusion_unet_image_policy.DiffusionUnetImagePolicy_JOINT
 
   shape_meta: ${shape_meta}
   

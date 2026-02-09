@@ -17,7 +17,7 @@ source .venv/bin/activate
 cd ../.. # move to root
 
 PYTHONWARNINGS=ignore::UserWarning \
-python script/eval_policy.py --config policy/$policy_name/deploy_policy.yml \
+python script/eval_policy_client.py --config policy/$policy_name/deploy_policy.yml \
     --overrides \
     --task_name ${task_name} \
     --task_config ${task_config} \
@@ -25,4 +25,7 @@ python script/eval_policy.py --config policy/$policy_name/deploy_policy.yml \
     --model_name ${model_name} \
     --ckpt_setting ${model_name} \
     --seed ${seed} \
-    --policy_name ${policy_name} 
+    --policy_name ${policy_name} \
+    --port 60913
+
+# bash eval.sh grab_roller demo_clean pi0_base_aloha_robotwin_full grab_roller-aloha-agilex_clean_50 0 0

@@ -64,6 +64,8 @@ class DPRunner:
         self.obs.clear()
 
     def update_obs(self, current_obs):
+        if np.dot(current_obs["cts_pos"][3:7], self.obs[-1]["cts_pos"][3:7]) < -1e-4:
+            current_obs["cts_pos"][3:7] = -current_obs["cts_pos"][3:7]
         self.obs.append(current_obs)
 
     def get_n_steps_obs(self):
@@ -93,6 +95,9 @@ class DPRunner:
             obs_dict_input["left_cam"] = obs_dict["left_cam"].unsqueeze(0)
             obs_dict_input["right_cam"] = obs_dict["right_cam"].unsqueeze(0)
             obs_dict_input["agent_pos"] = obs_dict["agent_pos"].unsqueeze(0)
+            obs_dict_input["cts_pos"] = obs_dict["cts_pos"].unsqueeze(0)
+            obs_dict_input["joint_pos"] = obs_dict["joint_pos"].unsqueeze(0)
+            #print(obs_dict_input["cts_pos"] )
 
             action_dict = policy.predict_action(obs_dict_input)
 

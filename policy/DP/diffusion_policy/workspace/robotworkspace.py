@@ -18,7 +18,7 @@ import copy
 import tqdm, random
 import numpy as np
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
-from diffusion_policy.policy.diffusion_unet_image_policy import DiffusionUnetImagePolicy
+from diffusion_policy.policy.diffusion_unet_image_policy import DiffusionUnetImagePolicy, DiffusionUnetImagePolicy_CTS, DiffusionUnetImagePolicy_JOINT
 from diffusion_policy.dataset.base_dataset import BaseImageDataset
 from diffusion_policy.common.checkpoint_util import TopKCheckpointManager
 from diffusion_policy.common.json_logger import JsonLogger
@@ -42,7 +42,12 @@ class RobotWorkspace(BaseWorkspace):
         random.seed(seed)
 
         # configure model
-        self.model: DiffusionUnetImagePolicy = hydra.utils.instantiate(cfg.policy)
+        if "mode" in cfg and cfg.mode == "cts":
+            self.model: DiffusionUnetImagePolicy_CTS = hydra.utils.instantiate(cfg.policy)
+        if "mode" in cfg and cfg.mode == "joint":
+            self.model: DiffusionUnetImagePolicy_JOINT = hydra.utils.instantiate(cfg.policy)
+        else:
+            self.model: DiffusionUnetImagePolicy = hydra.utils.instantiate(cfg.policy)
 
         self.ema_model: DiffusionUnetImagePolicy = None
         if cfg.training.use_ema:

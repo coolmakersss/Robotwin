@@ -12,7 +12,7 @@ from copy import deepcopy
 import sapien.core as sapien
 import envs._GLOBAL_CONFIGS as CONFIGS
 from envs.utils import transforms
-from .planner import CuroboPlanner
+from envs.robot.planner import CuroboPlanner
 import torch.multiprocessing as mp
 
 
@@ -123,6 +123,7 @@ class Robot:
 
     def reset(self, scene, need_topp=False, **kwargs):
         self._init_robot_(scene, need_topp, **kwargs)
+        from .planner import CuroboPlanner  # 或者绝对路径导入
 
         if self.communication_flag:
             if hasattr(self, "left_conn") and self.left_conn:
@@ -255,6 +256,7 @@ class Robot:
         print("right ee: ", self.right_ee.get_name())
 
     def set_planner(self, scene=None):
+        from .planner import CuroboPlanner  # 或者绝对路径导入
         abs_left_curobo_yml_path = os.path.join(CONFIGS.ROOT_PATH, self.left_curobo_yml_path)
         abs_right_curobo_yml_path = os.path.join(CONFIGS.ROOT_PATH, self.right_curobo_yml_path)
 

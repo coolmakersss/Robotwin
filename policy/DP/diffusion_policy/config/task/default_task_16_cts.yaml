@@ -1,6 +1,7 @@
 name: task_config
 
-image_shape: &image_shape [3, -1, -1]
+#image_shape: &image_shape [3, -1, -1]
+image_shape: &image_shape [3, 240, 320]
 shape_meta: &shape_meta
   # acceptable types: rgb, low_dim
   obs:
@@ -10,17 +11,20 @@ shape_meta: &shape_meta
     # front_cam:
     #   shape: *image_shape
     #   type: rgb
-    # left_cam:
-    #   shape: *image_shape
-    #   type: rgb
-    # right_cam:
-    #   shape: *image_shape
-    #   type: rgb
+    left_cam:
+      shape: *image_shape
+      type: rgb
+    right_cam:
+      shape: *image_shape
+      type: rgb
     agent_pos:
-      shape: [14]
+      shape: [16]
       type: low_dim
-  action:
-    shape: [14]
+    cts_pos:
+      shape: [16]
+      type: low_dim
+  cts_action:
+    shape: [16]
 
 env_runner:
   _target_: diffusion_policy.env_runner.pusht_image_runner.PushTImageRunner

@@ -1476,7 +1476,7 @@ class Base_Task(gym.Env):
 
         return True  # TODO: maybe need try error
 
-    def take_action(self, action, action_type:Literal['qpos', 'ee']='qpos'):  # action_type: qpos or ee
+    def take_action(self, action, action_type:Literal['qpos', 'ee', 'cts']='qpos'):  # action_type: qpos or ee
         if self.take_action_cnt == self.step_lim or self.eval_success:
             return
 
@@ -1519,6 +1519,95 @@ class Base_Task(gym.Env):
             actions[:, left_arm_dim + 1:left_arm_dim + right_arm_dim + 1],
             actions[:, left_arm_dim + right_arm_dim + 1],
         )
+        if action_type=='cts':
+            from scipy.spatial.transform import Rotation as R
+            def p1_p2_from_pa_pr(pa, pr):
+                p1 = pa - 0.5 * pr
+                p2 = pa + 0.5 * pr
+                return p1, p2 
+            def q1_q2_from_qa_qr(qa, qr, eps=1e-9):
+                
+                q1 = qa
+                Ra = R.from_quat(qa).as_matrix()
+                Rr = R.from_quat(qr).as_matrix()
+                R2 = Ra @ Rr
+                q2 =  R.from_matrix(R2).as_quat()
+                #print("qa: ", qa)
+                #print("qr: ", qr)
+                #print("q1: ", q1)
+                #print("q2: ", q2)
+                #print()
+                return q1, q2
+                
+
+                Ra = R.from_quat(qa).as_matrix()
+                rot_r = R.from_quat(qr)
+                rotvec = rot_r.as_rotvec()
+
+                half_rotvec = 0.5 * rotvec
+                S = R.from_rotvec(half_rotvec).as_matrix()
+
+                R1 = Ra @ np.array([S[0].T])
+                R2 = Ra @ S
+                #print("qa: ", qa)
+                #print("qr: ", qr)
+
+                #print(np.array([S[0].T]))
+                #print(S)
+                #print(R1)
+                #print(R2)
+                
+                q1 = R.from_matrix(R1.reshape(-1,3,3)).as_quat()
+                q2 = R.from_matrix(R2.reshape(-1,3,3)).as_quat()
+                #print("q1: ", q1)
+                #print("q2: ", q2)
+                #print()
+
+                return q1, q2
+            #print(actions.shape)
+            left_arm_pos, right_arm_pos = p1_p2_from_pa_pr(actions[:, :3], actions[:, 7:10])
+            left_arm_quat, right_arm_quat = q1_q2_from_qa_qr(actions[:, 3:7], actions[:, 10: 14])
+            #left_arm_quat, right_arm_quat = q1_q2_from_qa_qr(actions[:, 3:7] / np.linalg.norm(actions[:, 3:7], ord=2), actions[:, 10: 14]/np.linalg.norm(actions[:, 10: 14], ord=2))
+            #print(actions[:, 3:7] / np.linalg.norm(actions[:, 3:7]), actions[:, 10: 14] / np.linalg.norm(actions[:, 10: 14]))
+            #print(left_arm_quat, right_arm_quat)
+            #print()
+
+            left_arm_actions = np.hstack((left_arm_pos, left_arm_quat))
+            right_arm_actions = np.hstack((right_arm_pos, right_arm_quat))
+            #print(left_arm_actions, right_arm_actions)
+            
+            def cal_cts(left_arm_pos, right_arm_pos, left_arm_quat, right_arm_quat):
+                from scipy.spatial.transform import Rotation as R
+                from scipy.spatial.transform import Slerp
+                Pa = (left_arm_pos + right_arm_pos) / 2.0
+                Pr = right_arm_pos - left_arm_pos
+                R1_true = R.from_quat(left_arm_quat).as_matrix()
+                R2_true = R.from_quat(right_arm_quat).as_matrix()
+                # 相对旋转
+                Rr = R1_true.T @ R2_true    
+                Qr = R.from_matrix(Rr).as_quat()
+                # 计算中点 Qa（与前面的定义一致）
+                def mid_rotation_scipy(R1, R2, t=0.5):
+                    """
+                    用 scipy 的 Slerp 在 SO(3) 上插值。
+                    R1, R2: (3,3) 旋转矩阵或可以转换为矩阵的 array-like
+                    t: 插值参数，0 -> R1, 1 -> R2，默认 0.5（中点）
+                    返回: (3,3) 旋转矩阵
+                    """
+                    # 把两个矩阵打包为 Rotation 对象
+                    rots = R.from_matrix(np.stack([R1, R2], axis=0))  # shape (2,)
+                    key_times = np.array([0.0, 1.0])                  # 对应两个关键帧的时间点
+                    slerp = Slerp(key_times, rots)
+                    Q_mid = slerp([t]).as_quat()[0] 
+                    return Q_mid
+                Qa = mid_rotation_scipy(R1_true, R2_true, t=0.5)
+                cts_pose_state = np.concatenate([Pa, Qa, Pr, Qr])
+                #print(cts_pose_state)
+                return cts_pose_state
+            #print(cal_cts(left_arm_pos[0], right_arm_pos[0], left_arm_quat[0], right_arm_quat[0]))
+
+            left_gripper_actions, right_gripper_actions = (actions[:, -2], actions[:, -1])
+
         left_current_gripper, right_current_gripper = (
             self.robot.get_left_gripper_val(),
             self.robot.get_right_gripper_val(),
@@ -1571,7 +1660,7 @@ class Base_Task(gym.Env):
                 topp_right_flag = False
                 right_n_step = 50  # fixed
         
-        elif action_type == 'ee':
+        elif action_type == 'ee' or action_type == 'cts':
 
             left_result = self.robot.left_plan_path(left_arm_actions[0])
             right_result = self.robot.right_plan_path(right_arm_actions[0])

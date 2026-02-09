@@ -8,20 +8,23 @@ shape_meta: &shape_meta
     head_cam:
       shape: *image_shape
       type: rgb
-    # front_cam:
+    #front_cam:
     #   shape: *image_shape
     #   type: rgb
     left_cam:
-      shape: *image_shape
-      type: rgb
+       shape: *image_shape
+       type: rgb
     right_cam:
-      shape: *image_shape
-      type: rgb
-    agent_pos:
-      shape: [16]
+       shape: *image_shape
+       type: rgb
+    joint_pos:
+      shape: [14]
       type: low_dim
-  action:
-    shape: [16]
+    #agent_pos:
+    #  shape: [14]
+    #  type: low_dim
+  joint_action:
+    shape: [14]
 
 env_runner:
   _target_: diffusion_policy.env_runner.pusht_image_runner.PushTImageRunner
@@ -49,4 +52,3 @@ dataset:
   seed: 42
   val_ratio: 0.02
   max_train_episodes: null
-  

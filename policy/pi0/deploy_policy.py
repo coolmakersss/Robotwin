@@ -17,7 +17,11 @@ def encode_obs(observation):
         observation["observation"]["right_camera"]["rgb"],
         observation["observation"]["left_camera"]["rgb"],
     ]
-    input_state = observation["joint_action"]["vector"]
+    #input_state = observation["joint_action"]["vector"]
+    input_state = np.concatenate([observation["endpose"]["left_endpose"],
+                        observation["endpose"]["left_gripper"].reshape(1),
+                        observation["endpose"]["right_endpose"],
+                        observation["endpose"]["right_gripper"].reshape(1)])
 
     return input_rgb_arr, input_state
 
@@ -30,22 +34,26 @@ def get_model(usr_args):
 
 def eval(TASK_ENV, model, observation):
 
-    if model.observation_window is None:
-        instruction = TASK_ENV.get_instruction()
-        model.set_language(instruction)
+    #if model.observation_window is None:
+    instruction = TASK_ENV.get_instruction()
+    model.call(func_name="set_language",obs=instruction)
 
     input_rgb_arr, input_state = encode_obs(observation)
-    model.update_observation_window(input_rgb_arr, input_state)
+    model.call(func_name="update_observation_window", obs = (input_rgb_arr, input_state))
 
     # ======== Get Action ========
 
-    actions = model.get_action()[:model.pi0_step]
+    #actions = model.call(func_name='get_action')[:model.pi0_step]
+    actions = model.call(func_name='get_action')[:50]
+    print(actions[0])
+
 
     for action in actions:
-        TASK_ENV.take_action(action)
+        TASK_ENV.take_action(action, action_type="ee")
         observation = TASK_ENV.get_obs()
         input_rgb_arr, input_state = encode_obs(observation)
-        model.update_observation_window(input_rgb_arr, input_state)
+        #model.update_observation_window(input_rgb_arr, input_state)
+        model.call(func_name="update_observation_window", obs = (input_rgb_arr, input_state))
 
     # ============================
 
