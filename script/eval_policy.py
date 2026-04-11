@@ -70,6 +70,8 @@ def main(usr_args):
     ckpt_setting = usr_args["ckpt_setting"]
     # checkpoint_num = usr_args['checkpoint_num']
     policy_name = usr_args["policy_name"]
+    action_dim = usr_args["action_dim"]
+    mode = usr_args["mode"]
     instruction_type = usr_args["instruction_type"]
     save_dir = None
     video_save_dir = None
@@ -83,6 +85,8 @@ def main(usr_args):
     args['task_name'] = task_name
     args["task_config"] = task_config
     args["ckpt_setting"] = ckpt_setting
+    args["action_dim"] = action_dim
+    args["mode"] = mode
 
     embodiment_type = args.get("embodiment")
     embodiment_config_path = os.path.join(CONFIGS_PATH, "_embodiment_config.yml")

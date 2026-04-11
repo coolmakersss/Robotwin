@@ -131,7 +131,7 @@ def get_embodiment_config(robot_file):
     return embodiment_args
 
 class ModelClient:
-    def __init__(self, host='localhost', port=9999, timeout=30):
+    def __init__(self, host='180.184.148.133', port=60913, timeout=30):
         self.host = host
         self.port = port
         self.timeout = timeout
@@ -458,7 +458,8 @@ def eval_policy(task_name,
             TASK_ENV._set_eval_video_ffmpeg(ffmpeg)
 
         succ = False
-        model.call(func_name='reset_model')
+        #model.call(func_name='reset_model')
+        model.call(func_name='reset_obsrvationwindows')
         while TASK_ENV.take_action_cnt < TASK_ENV.step_lim:
             observation = TASK_ENV.get_obs()
             eval_func(TASK_ENV, model, observation)

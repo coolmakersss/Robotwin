@@ -23,6 +23,7 @@ mode: cts
 policy:
   _target_: diffusion_policy.policy.diffusion_unet_image_policy.DiffusionUnetImagePolicy_CTS
 
+
   shape_meta: ${shape_meta}
   
   noise_scheduler:

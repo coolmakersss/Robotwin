@@ -23,6 +23,7 @@ mode: joint
 policy:
   _target_: diffusion_policy.policy.diffusion_unet_image_policy.DiffusionUnetImagePolicy_JOINT
 
+
   shape_meta: ${shape_meta}
   
   noise_scheduler:
