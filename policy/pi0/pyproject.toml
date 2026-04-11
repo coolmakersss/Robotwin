@@ -44,11 +44,13 @@ dependencies = [
     "gymnasium==0.29.1",
     "trimesh==4.4.3",
     "open3d==0.19.0",
+    #"h5py==3.15.1",
     "imageio",
     "pydantic",
     "zarr",
     "openai",
-    "huggingface_hub",
+    #"huggingface_hub",
+    "huggingface-hub>=0.29,<0.30",
     "ffmpeg",
 ]
 
@@ -67,10 +69,13 @@ dev = [
     "pynvml>=12.0.0",
 ]
 
+[tool.uv]
+index-url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
 
 [tool.uv.sources]
 openpi-client = { workspace = true }
-lerobot = { git = "https://github.com/huggingface/lerobot", rev = "a445d9c9da6bea99a8972daa4fe1fdd053d711d2" }
+#lerobot = { git = "https://github.com/huggingface/lerobot", rev = "a445d9c9da6bea99a8972daa4fe1fdd053d711d2" }
+lerobot = { path = "./lerobot", editable = true }
 
 [tool.uv.workspace]
 members = ["packages/*"]

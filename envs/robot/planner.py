@@ -71,6 +71,7 @@ try:
                         },
                     }
                 }
+            #print(self.yml_path)
             motion_gen_config = MotionGenConfig.load_from_robot_config(
                 self.yml_path,
                 world_config,

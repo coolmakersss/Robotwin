@@ -286,7 +286,10 @@ def _normalize(x, params, forward=True):
     src_shape = x.shape
     # import pdb
     # pdb.set_trace()
+    #print(x.shape)
+    #print(scale)
     x = x.reshape(-1, scale.shape[0])
+    
     if forward:
         x = x * scale + offset
     else:

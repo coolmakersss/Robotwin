@@ -23,7 +23,9 @@ from generate_episode_instructions import *
 
 current_file_path = os.path.abspath(__file__)
 parent_directory = os.path.dirname(current_file_path)
-
+#os.environ['DISPLAY'] = '' 
+#os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+#os.environ["VK_ICD_FILENAMES"] = '/usr/share/vulkan/icd.d/nvidia_icd.json'
 
 def class_decorator(task_name):
     envs_module = importlib.import_module(f"envs.{task_name}")
@@ -198,6 +200,7 @@ def eval_policy(task_name,
     print(f"\033[34mPolicy Name: {args['policy_name']}\033[0m")
 
     expert_check = True
+    #expert_check = False
     TASK_ENV.suc = 0
     TASK_ENV.test_num = 0
 
@@ -220,6 +223,10 @@ def eval_policy(task_name,
         args["render_freq"] = 0
 
         if expert_check:
+            TASK_ENV.setup_demo(now_ep_num=now_id, seed=now_seed, is_test=True, **args)
+            episode_info = TASK_ENV.play_once()
+            TASK_ENV.close_env()
+            '''
             try:
                 TASK_ENV.setup_demo(now_ep_num=now_id, seed=now_seed, is_test=True, **args)
                 episode_info = TASK_ENV.play_once()
@@ -242,6 +249,7 @@ def eval_policy(task_name,
                 args["render_freq"] = render_freq
                 print("error occurs !")
                 continue
+            '''
 
         if (not expert_check) or (TASK_ENV.plan_success and TASK_ENV.check_success()):
             succ_seed += 1
@@ -258,6 +266,7 @@ def eval_policy(task_name,
         results = generate_episode_descriptions(args["task_name"], episode_info_list, test_num)
         instruction = np.random.choice(results[0][instruction_type])
         TASK_ENV.set_instruction(instruction=instruction)  # set language instruction
+        print("##")
 
         if TASK_ENV.eval_video_path is not None:
             ffmpeg = subprocess.Popen(
@@ -291,7 +300,9 @@ def eval_policy(task_name,
         succ = False
         reset_func(model)
         while TASK_ENV.take_action_cnt < TASK_ENV.step_lim:
+            print("###")
             observation = TASK_ENV.get_obs()
+            print(observation)
             eval_func(TASK_ENV, model, observation)
             if TASK_ENV.eval_success:
                 succ = True

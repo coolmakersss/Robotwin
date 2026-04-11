@@ -4,6 +4,22 @@ This script is used to compute the normalization statistics for a given config. 
 will compute the mean and standard deviation of the data in the dataset and save it
 to the config assets directory.
 """
+# Monkey-patch to fix 'List' feature type error in old datasets
+try:
+    import datasets.features.features as features
+
+    _OLD_GENERATE_FROM_DICT = features.generate_from_dict
+
+    def _new_generate_from_dict(obj):
+        if isinstance(obj, dict) and obj.get("_type") == "List":
+            obj["_type"] = "Sequence"
+        return _OLD_GENERATE_FROM_DICT(obj)
+
+    features.generate_from_dict = _new_generate_from_dict
+except (ImportError, AttributeError):
+    # If datasets or the function doesn't exist, do nothing.
+    pass
+# End of monkey-patch
 
 import numpy as np
 import tqdm

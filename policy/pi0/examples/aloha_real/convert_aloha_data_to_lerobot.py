@@ -56,6 +56,7 @@ def create_empty_dataset(
         "left_wrist_rotate",
         "left_gripper",
     ]
+
     cameras = [
         "cam_high",
         "cam_low",

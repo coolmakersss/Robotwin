@@ -18,6 +18,8 @@ past_action_visible: False
 keypoint_visible_rate: 1.0
 obs_as_global_cond: True
 
+mode: eef
+
 policy:
   _target_: diffusion_policy.policy.diffusion_unet_image_policy.DiffusionUnetImagePolicy
 
@@ -123,7 +125,7 @@ logging:
   project: diffusion_policy_debug
   resume: True
   mode: online
-  name: ${now:%Y.%m.%d-%H.%M.%S}_${name}_${task_name}
+  name: ${now:%Y.%m.%d-%H.%M.%S}_${name}_eef
   tags: ["${name}", "${task_name}", "${exp_name}"]
   id: null
   group: null

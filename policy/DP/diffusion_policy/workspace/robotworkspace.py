@@ -18,7 +18,7 @@ import copy
 import tqdm, random
 import numpy as np
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
-from diffusion_policy.policy.diffusion_unet_image_policy import DiffusionUnetImagePolicy
+from diffusion_policy.policy.diffusion_unet_image_policy import DiffusionUnetImagePolicy, DiffusionUnetImagePolicy_CTS, DiffusionUnetImagePolicy_JOINT, DiffusionUnetImagePolicy_DELTA, DiffusionUnetImagePolicy_DELTA_CTS, DiffusionUnetImagePolicy_CHUNK_DELTA, DiffusionUnetImagePolicy_CHUNK_DELTA_NO_NORM, DiffusionUnetImagePolicy_CHUNK_DELTA_POSITION, DiffusionUnetImagePolicy_CHUNK_DELTA_CTS_POSITION
 from diffusion_policy.dataset.base_dataset import BaseImageDataset
 from diffusion_policy.common.checkpoint_util import TopKCheckpointManager
 from diffusion_policy.common.json_logger import JsonLogger
@@ -42,7 +42,33 @@ class RobotWorkspace(BaseWorkspace):
         random.seed(seed)
 
         # configure model
-        self.model: DiffusionUnetImagePolicy = hydra.utils.instantiate(cfg.policy)
+        if "mode" in cfg and cfg.mode == "cts":
+            self.model: DiffusionUnetImagePolicy_CTS = hydra.utils.instantiate(cfg.policy)
+            print("Using CTS policy")
+        if "mode" in cfg and cfg.mode == "joint":
+            self.model: DiffusionUnetImagePolicy_JOINT = hydra.utils.instantiate(cfg.policy)
+            print("Using JOINT policy")
+        if "mode" in cfg and cfg.mode == "eef":
+            self.model: DiffusionUnetImagePolicy = hydra.utils.instantiate(cfg.policy)
+            print("Using EEF policy")
+        if "mode" in cfg and cfg.mode == "delta":
+            self.model: DiffusionUnetImagePolicy_DELTA = hydra.utils.instantiate(cfg.policy)
+            print("Using DELTA policy")
+        if "mode" in cfg and cfg.mode == "delta_cts":
+            self.model: DiffusionUnetImagePolicy_DELTA_CTS = hydra.utils.instantiate(cfg.policy)
+            print("Using DELTA_CTS policy")
+        if "mode" in cfg and cfg.mode == "chunk_delta":
+            self.model: DiffusionUnetImagePolicy_CHUNK_DELTA = hydra.utils.instantiate(cfg.policy)
+            print("Using CHUNK_DELTA policy")
+        if "mode" in cfg and cfg.mode == "chunk_delta_position":
+            self.model: DiffusionUnetImagePolicy_CHUNK_DELTA_POSITION = hydra.utils.instantiate(cfg.policy)
+            print("Using CHUNK_DELT_POSITION policy")
+        if "mode" in cfg and cfg.mode == "chunk_delta_no_norm":
+            self.model: DiffusionUnetImagePolicy_CHUNK_DELTA_NO_NORM = hydra.utils.instantiate(cfg.policy)
+            print("Using CHUNK_DELTA_NO_NORM policy")
+        if "mode" in cfg and cfg.mode == "chunk_delta_cts_position":
+            self.model: DiffusionUnetImagePolicy_CHUNK_DELTA_CTS_POSITION = hydra.utils.instantiate(cfg.policy)
+            print("Using CHUNK_DELTA_CTS_POSITION policy")
 
         self.ema_model: DiffusionUnetImagePolicy = None
         if cfg.training.use_ema:
@@ -245,7 +271,16 @@ class RobotWorkspace(BaseWorkspace):
                         # sample trajectory from training set, and evaluate difference
                         batch = train_sampling_batch
                         obs_dict = batch["obs"]
-                        gt_action = batch["action"]
+                        if cfg.mode == 'cts':
+                            gt_action = batch["cts_action"]
+                        elif cfg.mode == 'joint':
+                            gt_action = batch["joint_action"]
+                        elif cfg.mode == 'delta_cts':
+                            gt_action = batch["delta_cts_action"]
+                        elif cfg.mode == 'delta':
+                            gt_action = batch["delta_action"]
+                        else:
+                            gt_action = batch["action"]
 
                         result = policy.predict_action(obs_dict)
                         pred_action = result["action_pred"]
@@ -262,7 +297,8 @@ class RobotWorkspace(BaseWorkspace):
                 if ((self.epoch + 1) % cfg.training.checkpoint_every) == 0:
                     # checkpointing
                     save_name = pathlib.Path(self.cfg.task.dataset.zarr_path).stem
-                    self.save_checkpoint(f"checkpoints/{save_name}-{seed}/{self.epoch + 1}.ckpt")  # TODO
+                    self.save_checkpoint(f"checkpoints/{save_name}-{seed}/{cfg.mode}/{self.epoch + 1}.ckpt")  # TODO
+                    #self.save_checkpoint(f"/mnt/aoss/xiangenda/tmp/checkpoints/{save_name}-{seed}/{cfg.mode}/{self.epoch + 1}.ckpt")  # TODO
 
                 # ========= eval end for this epoch ==========
                 policy.train()

@@ -23,3 +23,11 @@ python script/eval_policy.py --config policy/$policy_name/deploy_policy.yml \
     --ckpt_setting ${ckpt_setting} \
     --expert_data_num ${expert_data_num} \
     --seed ${seed}
+
+python script/eval_policy.py --config policy/DP/deploy_policy.yml \
+    --overrides \
+    --task_name grab_roller \
+    --task_config demo_clean \
+    --ckpt_setting aloha-agilex_clean_50 \
+    --expert_data_num 50 \
+    --seed 0

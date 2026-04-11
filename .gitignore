@@ -25,6 +25,10 @@ envs/curobo/*
 
 .vscode
 /config.json
-
+*.out
 /*.json*
 /*.txt
+*.lock
+**/training_data*
+
+**/lerobot/

@@ -59,6 +59,24 @@ def create_empty_dataset(
         "right_wrist_rotate",
         "right_gripper",
     ]
+    motors = [
+        "right_x",
+        "right_y",
+        "right_z",
+        "right_euler_w",
+        "right_euler_x",
+        "right_euler_y",
+        "right_euler_z",
+        "right_gripper",
+        "left_x",
+        "left_y",
+        "left_z",
+        "left_euler_w",
+        "left_euler_x",
+        "left_euler_y",
+        "left_euler_z",
+        "left_gripper",
+    ]
 
     cameras = [
         "cam_high",

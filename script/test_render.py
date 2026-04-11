@@ -46,6 +46,7 @@ class Sapien_TEST(gym.Env):
     def __init__(self):
         super().__init__()
         ta.setup_logging("CRITICAL")  # hide logging
+        #self.setup_scene()
         try:
             self.setup_scene()
             print("\033[32m" + "Render Well" + "\033[0m")

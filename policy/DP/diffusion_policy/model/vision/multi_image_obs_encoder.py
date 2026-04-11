@@ -43,6 +43,7 @@ class MultiImageObsEncoder(ModuleAttrMixin):
             key_model_map["rgb"] = rgb_model
 
         obs_shape_meta = shape_meta["obs"]
+        print(obs_shape_meta)
         for key, attr in obs_shape_meta.items():
             shape = tuple(attr["shape"])
             type = attr.get("type", "low_dim")
@@ -184,6 +185,8 @@ class MultiImageObsEncoder(ModuleAttrMixin):
         batch_size = 1
         for key, attr in obs_shape_meta.items():
             shape = tuple(attr["shape"])
+            print("key: ",key)
+            print("shape: ",shape)
             this_obs = torch.zeros((batch_size, ) + shape, dtype=self.dtype, device=self.device)
             example_obs_dict[key] = this_obs
         example_output = self.forward(example_obs_dict)

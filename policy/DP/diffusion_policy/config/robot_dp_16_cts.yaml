@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - task: default_task_14
+  - task: default_task_16_cts
 
 name: robot_${task.name}
 _target_: diffusion_policy.workspace.robotworkspace.RobotWorkspace
@@ -18,8 +18,10 @@ past_action_visible: False
 keypoint_visible_rate: 1.0
 obs_as_global_cond: True
 
+mode: cts
+
 policy:
-  _target_: diffusion_policy.policy.diffusion_unet_image_policy.DiffusionUnetImagePolicy
+  _target_: diffusion_policy.policy.diffusion_unet_image_policy.DiffusionUnetImagePolicy_CTS
 
   shape_meta: ${shape_meta}
   
@@ -123,7 +125,7 @@ logging:
   project: diffusion_policy_debug
   resume: True
   mode: online
-  name: ${now:%Y.%m.%d-%H.%M.%S}_${name}_${task_name}
+  name: ${now:%Y.%m.%d-%H.%M.%S}_${name}_${mode}
   tags: ["${name}", "${task_name}", "${exp_name}"]
   id: null
   group: null

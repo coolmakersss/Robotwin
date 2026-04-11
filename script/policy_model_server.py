@@ -72,7 +72,7 @@ def json_to_numpy(json_str: str) -> Any:
 
 # --------------------- Model Server Implementation ---------------------
 class ModelServer:
-    def __init__(self, model, host='localhost', port=None):
+    def __init__(self, model, host='0.0.0.0', port=None):
         self.model = model
         self.host = host
         self.port = port
@@ -160,7 +160,13 @@ class ModelServer:
                         raise AttributeError(f"No model method named '{cmd}'")
 
                     # Call method with or without obs
-                    result = method(obs) if obs is not None else method()
+                    
+                    if obs is None:
+                        result = method()
+                    elif cmd == "update_observation_window":
+                        result = method(obs[0], obs[1])
+                    else:
+                        result = method(obs)
                     response = {"res": result}
 
                     # Serialize response and send back with length header

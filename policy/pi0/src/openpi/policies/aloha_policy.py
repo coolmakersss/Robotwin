@@ -27,8 +27,8 @@ class AlohaInputs(transforms.DataTransformFn):
 
     Expected inputs:
     - images: dict[name, img] where img is [channel, height, width]. name must be in EXPECTED_CAMERAS.
-    - state: [14]
-    - actions: [action_horizon, 14]
+    - state: [raw_action_dim]
+    - actions: [action_horizon, raw_action_dim]
     """
 
     # The action dimension of the model. Will be used to pad state and actions.
@@ -50,7 +50,7 @@ class AlohaInputs(transforms.DataTransformFn):
     def __call__(self, data: dict) -> dict:
         data = _decode_aloha(data, adapt_to_pi=self.adapt_to_pi)
 
-        # Get the state. We are padding from 14 to the model action dim.
+        # Pad the raw dataset state to the model action dimension.
         state = transforms.pad_to_dim(data["state"], self.action_dim)
 
         in_images = data["images"]
@@ -102,13 +102,15 @@ class AlohaInputs(transforms.DataTransformFn):
 class AlohaOutputs(transforms.DataTransformFn):
     """Outputs for the Aloha policy."""
 
+    # Raw action dimension to keep before removing model-side zero padding.
+    action_dim: int = 16
+
     # If true, this will convert the joint and gripper values from the standard Aloha space to
     # the space used by the pi internal runtime which was used to train the base model.
     adapt_to_pi: bool = True
 
     def __call__(self, data: dict) -> dict:
-        # Only return the first 14 dims.
-        actions = np.asarray(data["actions"][:, :14])
+        actions = np.asarray(data["actions"][:, :self.action_dim])
         return {"actions": _encode_actions(actions, adapt_to_pi=self.adapt_to_pi)}
 
 

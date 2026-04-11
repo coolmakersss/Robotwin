@@ -8,7 +8,6 @@ import cv2
 import argparse
 import yaml, json
 
-
 def load_hdf5(dataset_path):
     if not os.path.isfile(dataset_path):
         print(f"Dataset does not exist at \n{dataset_path}\n")
@@ -16,19 +15,27 @@ def load_hdf5(dataset_path):
 
     with h5py.File(dataset_path, "r") as root:
         left_gripper, left_arm = (
-            root["/joint_action/left_gripper"][()],
-            root["/joint_action/left_arm"][()],
+            root["/endpose/left_gripper"][()],
+            root["/endpose/left_endpose"][()],
         )
         right_gripper, right_arm = (
-            root["/joint_action/right_gripper"][()],
-            root["/joint_action/right_arm"][()],
+            root["/endpose/right_gripper"][()],
+            root["/endpose/right_endpose"][()],
         )
+        # Create 16-dimensional vector: left_endpose(7) + left_gripper(1) + right_endpose(7) + right_gripper(1)
+        joint_vector = root["/joint_action/vector"][()]
+        end_pose_vector = np.concatenate([
+            left_arm,  # 7 dims: xyz + quaternion
+            left_gripper.reshape(-1, 1),   # 1 dim: gripper
+            right_arm, # 7 dims: xyz + quaternion  
+            right_gripper.reshape(-1, 1)  # 1 dim: gripper
+        ], axis=1)
+
         image_dict = dict()
         for cam_name in root[f"/observation/"].keys():
             image_dict[cam_name] = root[f"/observation/{cam_name}/rgb"][()]
 
-    return left_gripper, left_arm, right_gripper, right_arm, image_dict
-
+    return left_gripper, left_arm, right_gripper, right_arm, joint_vector, end_pose_vector, image_dict
 
 def images_encoding(imgs):
     encode_data = []
@@ -76,7 +83,7 @@ def data_transform(path, episode_num, save_path):
         ) as f:
             json.dump(save_instructions_json, f, indent=2)
 
-        left_gripper_all, left_arm_all, right_gripper_all, right_arm_all, image_dict = (load_hdf5(
+        left_gripper_all, left_arm_all, right_gripper_all, right_arm_all, joint_vector_all, end_pose_vector_all, image_dict = (load_hdf5(
             os.path.join(path, "data", f"episode{i}.hdf5")))
         qpos = []
         actions = []
@@ -97,8 +104,10 @@ def data_transform(path, episode_num, save_path):
             )
 
             state = np.array(left_arm.tolist() + [left_gripper] + right_arm.tolist() + [right_gripper])  # joints angle
+            state_eef = end_pose_vector_all[j] # end effector
 
             state = state.astype(np.float32)
+            state_eef = state_eef.astype(np.float32)
 
             if j != left_gripper_all.shape[0] - 1:
                 qpos.append(state)
@@ -119,7 +128,7 @@ def data_transform(path, episode_num, save_path):
                 cam_left_wrist.append(camera_left_wrist_resized)
 
             if j != 0:
-                action = state
+                action = state_eef # eef action
                 actions.append(action)
                 left_arm_dim.append(left_arm.shape[0])
                 right_arm_dim.append(right_arm.shape[0])

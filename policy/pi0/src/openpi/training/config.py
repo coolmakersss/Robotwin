@@ -196,7 +196,11 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
     # If true, will convert joint dimensions to deltas with respect to the current state before passing to the model.
     # Gripper dimensions will remain in absolute values.
     use_delta_joint_actions: bool = True
+    delta_action_mask: tuple = _transforms.make_bool_mask(6, -1, 6, -1)
+    # Raw action/state dimension in the dataset before zero-padding to the model action dim.
+    raw_action_dim: int = 14
     # If provided, will be injected into the input data if the "prompt" key is not present.
+    
     default_prompt: str | None = None
     # If true, this will convert the joint and gripper values from the standard Aloha space to
     # the space used by the pi internal runtime which was used to train the base model. People who
@@ -220,10 +224,11 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
     def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
         data_transforms = _transforms.Group(
             inputs=[aloha_policy.AlohaInputs(action_dim=model_config.action_dim, adapt_to_pi=self.adapt_to_pi)],
-            outputs=[aloha_policy.AlohaOutputs(adapt_to_pi=self.adapt_to_pi)],
+            outputs=[aloha_policy.AlohaOutputs(action_dim=self.raw_action_dim, adapt_to_pi=self.adapt_to_pi)],
         )
         if self.use_delta_joint_actions:
-            delta_action_mask = _transforms.make_bool_mask(6, -1, 6, -1)
+            #delta_action_mask = _transforms.make_bool_mask(6, -1, 6, -1)
+            delta_action_mask = self.delta_action_mask
             data_transforms = data_transforms.push(
                 inputs=[_transforms.DeltaActions(delta_action_mask)],
                 outputs=[_transforms.AbsoluteActions(delta_action_mask)],
@@ -323,14 +328,14 @@ class TrainConfig:
     batch_size: int = 32
     # Number of workers to use for the data loader. Increasing this number will speed up data loading but
     # will increase memory and CPU usage.
-    num_workers: int = 2
+    num_workers: int = 8
     # Number of train steps (batches) to run.
     num_train_steps: int = 30_000
 
     # How often (in steps) to log training metrics.
     log_interval: int = 100
     # How often (in steps) to save checkpoints.
-    save_interval: int = 1000
+    save_interval: int = 10000
     # If set, any existing checkpoints matching step % keep_period == 0 will not be deleted.
     keep_period: int | None = 5000
 
@@ -446,7 +451,15 @@ _CONFIGS = [
         name="pi0_base_aloha_robotwin_full",
         model=pi0.Pi0Config(),
         data=LeRobotAlohaDataConfig(
-            repo_id="your_repo_id",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/grab_roller-aloha-agilex_clean_50-50",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/grab_roller-arx-x5_clean_50-50",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/lift_pot-aloha-agilex_clean_50-50",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/lift_pot-arx-x5_clean_50-50",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/grab_roller-aloha-agilex_clean_50-50-cts",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/grab_roller-arx-x5_clean_50-50-cts",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/lift_pot-aloha-agilex_clean_50-50-cts",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/lift_pot-arx-x5_clean_50-50-cts",  # your datasets repo_id
+            repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/lift_pot-aloha-agilex_clean_50-50-delta",  # your datasets repo_id
             adapt_to_pi=False,
             repack_transforms=_transforms.Group(inputs=[
                 _transforms.RepackTransform({
@@ -469,14 +482,174 @@ _CONFIGS = [
         batch_size=32,  # the total batch_size not pre_gpu batch_size
         weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
         num_train_steps=30000,
-        fsdp_devices=4,  # refer line 359
+        fsdp_devices=1,  # refer line 359
     ),
+    # pi0_base by full
+    TrainConfig(
+        name="pi0_base_aloha_robotwin_full_chunk_delta",
+        model=pi0.Pi0Config(),
+        data=LeRobotAlohaDataConfig(
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/grab_roller-aloha-agilex_clean_50-50",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/grab_roller-arx-x5_clean_50-50",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/lift_pot-aloha-agilex_clean_50-50",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/lift_pot-arx-x5_clean_50-50",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/grab_roller-aloha-agilex_clean_50-50-cts",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/grab_roller-arx-x5_clean_50-50-cts",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/lift_pot-aloha-agilex_clean_50-50-cts",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/lift_pot-arx-x5_clean_50-50-cts",  # your datasets repo_id
+            repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/lift_pot-aloha-agilex_clean_50-50-delta",  # your datasets repo_id
+            adapt_to_pi=False,
+            use_delta_joint_actions=True,
+            delta_action_mask=_transforms.make_bool_mask(7, -1, 7, -1),
+            repack_transforms=_transforms.Group(inputs=[
+                _transforms.RepackTransform({
+                    "images": {
+                        "cam_high": "observation.images.cam_high",
+                        "cam_left_wrist": "observation.images.cam_left_wrist",
+                        "cam_right_wrist": "observation.images.cam_right_wrist",
+                    },
+                    "state": "observation.state",
+                    "actions": "action",
+                    "prompt": "prompt",
+                })
+            ]),
+            base_config=DataConfig(
+                local_files_only=True,  # Set to True for local-only datasets.
+                prompt_from_task=True,  # Set to True for prompt by task_name
+            ),
+        ),
+        freeze_filter=pi0.Pi0Config().get_freeze_filter(),
+        batch_size=32,  # the total batch_size not pre_gpu batch_size
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30000,
+        fsdp_devices=1,  # refer line 359
+    ),
+
+    TrainConfig(
+        name="pi0_base_aloha_robotwin_full_chunk_delta_cts_position",
+        model=pi0.Pi0Config(),
+        data=LeRobotAlohaDataConfig(
+            ############################# for position only delta cts action #############
+            repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/lift_pot-aloha-agilex_clean_50-50-cts",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/grab_roller-aloha-agilex_clean_50-50-cts",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/lift_pot-arx-x5_clean_50-50-cts",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/grab_roller-arx-x5_clean_50-50-cts",  # your datasets repo_id
+            adapt_to_pi=False,
+            use_delta_joint_actions=True,
+            delta_action_mask=_transforms.make_bool_mask(3, -4, 3, -6),
+            repack_transforms=_transforms.Group(inputs=[
+                _transforms.RepackTransform({
+                    "images": {
+                        "cam_high": "observation.images.cam_high",
+                        "cam_left_wrist": "observation.images.cam_left_wrist",
+                        "cam_right_wrist": "observation.images.cam_right_wrist",
+                    },
+                    "state": "observation.state",
+                    "actions": "action",
+                    "prompt": "prompt",
+                })
+            ]),
+            base_config=DataConfig(
+                local_files_only=True,  # Set to True for local-only datasets.
+                prompt_from_task=True,  # Set to True for prompt by task_name
+            ),
+        ),
+        freeze_filter=pi0.Pi0Config().get_freeze_filter(),
+        batch_size=32,  # the total batch_size not pre_gpu batch_size
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30000,
+        fsdp_devices=1,  # refer line 359
+    ),
+
+    TrainConfig(
+        name="pi0_base_aloha_robotwin_full_chunk_delta_cts_position_10d_action",
+        model=pi0.Pi0Config(),
+        data=LeRobotAlohaDataConfig(
+            ############################# for 10d action: 3d pos + 6d rot + 1d gripper per arm #############
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/lift_pot-aloha-agilex_clean_50-50-cts",  # your datasets repo_id
+            repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/grab_roller-aloha-agilex_clean_50-50-cts-10d_action",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/grab_roller-aloha-agilex_clean_50-50-cts",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/lift_pot-arx-x5_clean_50-50-cts",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/grab_roller-arx-x5_clean_50-50-cts",  # your datasets repo_id
+            raw_action_dim=20,
+            adapt_to_pi=False,
+            use_delta_joint_actions=True,
+            delta_action_mask=_transforms.make_bool_mask(3, -7, 3, -7),
+            repack_transforms=_transforms.Group(inputs=[
+                _transforms.RepackTransform({
+                    "images": {
+                        "cam_high": "observation.images.cam_high",
+                        "cam_left_wrist": "observation.images.cam_left_wrist",
+                        "cam_right_wrist": "observation.images.cam_right_wrist",
+                    },
+                    "state": "observation.state",
+                    "actions": "action",
+                    "prompt": "prompt",
+                })
+            ]),
+            base_config=DataConfig(
+                local_files_only=True,  # Set to True for local-only datasets.
+                prompt_from_task=True,  # Set to True for prompt by task_name
+            ),
+        ),
+        freeze_filter=pi0.Pi0Config().get_freeze_filter(),
+        batch_size=32,  # the total batch_size not pre_gpu batch_size
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30000,
+        fsdp_devices=1,  # refer line 359
+    ),
+
+    TrainConfig(
+        name="pi0_base_aloha_robotwin_full_chunk_delta_position",
+        model=pi0.Pi0Config(),
+        data=LeRobotAlohaDataConfig(
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/grab_roller-aloha-agilex_clean_50-50",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/grab_roller-arx-x5_clean_50-50",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/lift_pot-aloha-agilex_clean_50-50",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/lift_pot-arx-x5_clean_50-50",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/grab_roller-aloha-agilex_clean_50-50-cts",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/grab_roller-arx-x5_clean_50-50-cts",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/lift_pot-aloha-agilex_clean_50-50-cts",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/lift_pot-arx-x5_clean_50-50-cts",  # your datasets repo_id
+
+            ############################# for position only delta action #############
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/lift_pot-aloha-agilex_clean_50-50",  # your datasets repo_id
+            repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/grab_roller-aloha-agilex_clean_50-50",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/lift_pot-arx-x5_clean_50-50",  # your datasets repo_id
+            #repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/grab_roller-arx-x5_clean_50-50",  # your datasets repo_id
+            adapt_to_pi=False,
+            use_delta_joint_actions=True,
+            delta_action_mask=_transforms.make_bool_mask(3, -5, 3, -5),
+            repack_transforms=_transforms.Group(inputs=[
+                _transforms.RepackTransform({
+                    "images": {
+                        "cam_high": "observation.images.cam_high",
+                        "cam_left_wrist": "observation.images.cam_left_wrist",
+                        "cam_right_wrist": "observation.images.cam_right_wrist",
+                    },
+                    "state": "observation.state",
+                    "actions": "action",
+                    "prompt": "prompt",
+                })
+            ]),
+            base_config=DataConfig(
+                local_files_only=True,  # Set to True for local-only datasets.
+                prompt_from_task=True,  # Set to True for prompt by task_name
+            ),
+        ),
+        freeze_filter=pi0.Pi0Config().get_freeze_filter(),
+        batch_size=32,  # the total batch_size not pre_gpu batch_size
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30000,
+        fsdp_devices=1,  # refer line 359
+    ),
+
     # pi0_fast_base by full
     TrainConfig(
         name="pi0_fast_aloha_robotwin_full",
         model=pi0_fast.Pi0FASTConfig(),
         data=LeRobotAlohaDataConfig(
-            repo_id="your_repo_id",  # your datasets repo_id
+            repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/grab_roller-aloha-agilex_clean_50-50",  # your datasets repo_id
             adapt_to_pi=False,
             repack_transforms=_transforms.Group(inputs=[
                 _transforms.RepackTransform({
