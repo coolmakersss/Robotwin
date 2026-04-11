@@ -74,7 +74,8 @@ class DPRunner:
         result = dict()
         for key in self.obs[0].keys():
             result[key] = self.stack_last_n_obs([obs[key] for obs in self.obs], self.n_obs_steps)
-
+        #print(result["agent_pos"])
+        #print()
         return result
 
     def get_action(self, policy: BaseImagePolicy, observaton=None):

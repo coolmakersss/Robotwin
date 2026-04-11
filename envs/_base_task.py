@@ -158,6 +158,9 @@ class Base_Task(gym.Env):
 
         self.stage_success_tag = False
 
+        self.left_state = None
+        self.right_state = None
+
     def check_stable(self):
         actors_list, actors_pose_list = [], []
         for actor in self.scene.get_all_actors():
@@ -1476,7 +1479,7 @@ class Base_Task(gym.Env):
 
         return True  # TODO: maybe need try error
 
-    def take_action(self, action, action_type:Literal['qpos', 'ee', 'cts']='qpos'):  # action_type: qpos or ee
+    def take_action(self, action, action_type:Literal['qpos', 'ee', 'cts', 'delta', 'delta_cts']='qpos'):  # action_type: qpos or ee
         if self.take_action_cnt == self.step_lim or self.eval_success:
             return
 
@@ -1551,7 +1554,6 @@ class Base_Task(gym.Env):
                 R2 = Ra @ S
                 #print("qa: ", qa)
                 #print("qr: ", qr)
-
                 #print(np.array([S[0].T]))
                 #print(S)
                 #print(R1)
@@ -1607,6 +1609,38 @@ class Base_Task(gym.Env):
             #print(cal_cts(left_arm_pos[0], right_arm_pos[0], left_arm_quat[0], right_arm_quat[0]))
 
             left_gripper_actions, right_gripper_actions = (actions[:, -2], actions[:, -1])
+        
+        if action_type=='delta':
+            self.left_state = self.get_arm_pose("left")
+            self.right_state = self.get_arm_pose("right")
+            #if self.left_state is None:
+            #    self.left_state = self.get_arm_pose("left")
+            #    self.right_state = self.get_arm_pose("right")
+            left_current_gripper, right_current_gripper = (
+                self.robot.get_left_gripper_val(),
+                self.robot.get_right_gripper_val(),
+            )
+            left_arm_actions = np.array([self.left_state + left_arm_actions[0]])
+            right_arm_actions = np.array([self.right_state + right_arm_actions[0]])
+            left_gripper_actions = np.array([left_current_gripper + left_gripper_actions[0]])
+            right_gripper_actions = np.array([right_current_gripper + right_gripper_actions[0]])
+            #print(self.left_state)
+            #self.left_state = left_arm_actions[0]
+            #self.right_state = right_arm_actions[0]
+            #print(left_arm_actions)
+
+        if action_type=='delta_cts':
+            now_left_state = self.get_arm_pose("left")
+            now_right_state = self.get_arm_pose("right")
+            left_current_gripper, right_current_gripper = (
+                self.robot.get_left_gripper_val(),
+                self.robot.get_right_gripper_val(),
+            )
+            left_arm_actions = np.array([now_left_state + left_arm_actions[0]])
+            right_arm_actions = np.array([now_right_state + right_arm_actions[0]])
+            left_gripper_actions = np.array([left_current_gripper + left_gripper_actions[0]])
+            right_gripper_actions = np.array([right_current_gripper + right_gripper_actions[0]])
+
 
         left_current_gripper, right_current_gripper = (
             self.robot.get_left_gripper_val(),
@@ -1660,7 +1694,7 @@ class Base_Task(gym.Env):
                 topp_right_flag = False
                 right_n_step = 50  # fixed
         
-        elif action_type == 'ee' or action_type == 'cts':
+        elif action_type == 'ee' or action_type == 'cts' or action_type == 'delta' or action_type == 'delta_cts':
 
             left_result = self.robot.left_plan_path(left_arm_actions[0])
             right_result = self.robot.right_plan_path(right_arm_actions[0])

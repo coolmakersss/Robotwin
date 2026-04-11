@@ -59,12 +59,25 @@ def get_model(usr_args):
         load_config_path = f'./policy/DP/diffusion_policy/config/robot_dp_{action_dim}_cts.yaml'
     elif usr_args['mode'] == "joint":
         load_config_path = f'./policy/DP/diffusion_policy/config/robot_dp_{action_dim}_joint.yaml'
+    elif usr_args['mode'] == "delta":
+        load_config_path = f'./policy/DP/diffusion_policy/config/robot_dp_{action_dim}_delta_horizon_32.yaml'
+    elif usr_args['mode'] == "delta_cts":
+        load_config_path = f'./policy/DP/diffusion_policy/config/robot_dp_{action_dim}_delta_cts.yaml'
+    elif usr_args['mode'] == "chunk_delta":
+        load_config_path = f'./policy/DP/diffusion_policy/config/robot_dp_{action_dim}_chunk_delta.yaml'
+    elif usr_args['mode'] == "chunk_delta_position":
+        load_config_path = f'./policy/DP/diffusion_policy/config/robot_dp_{action_dim}_chunk_delta_position.yaml'
+    elif usr_args['mode'] == "chunk_delta_cts_position":
+        load_config_path = f'./policy/DP/diffusion_policy/config/robot_dp_{action_dim}_chunk_delta_cts_position.yaml'
+    elif usr_args['mode'] == "chunk_delta_no_norm":
+        load_config_path = f'./policy/DP/diffusion_policy/config/robot_dp_{action_dim}_chunk_delta_no_norm.yaml'
     else:
         load_config_path = f'./policy/DP/diffusion_policy/config/robot_dp_{action_dim}.yaml'
     with open(load_config_path, "r", encoding="utf-8") as f:
         model_training_config = yaml.safe_load(f)
     
     n_obs_steps = model_training_config['n_obs_steps']
+    #n_action_steps = int(model_training_config['n_action_steps'] // 2)
     n_action_steps = model_training_config['n_action_steps']
     
     return DP(ckpt_file, n_obs_steps=n_obs_steps, n_action_steps=n_action_steps)
@@ -84,10 +97,11 @@ def eval(TASK_ENV, model, observation):
         actions = model.get_action(obs)
     else:
         actions = model.get_action()
-
+    #actions = actions[:1]
     for action in actions:
-        TASK_ENV.take_action(action=action, action_type="ee")
-        #TASK_ENV.take_action(action=action, action_type="cts")
+        #TASK_ENV.take_action(action=action, action_type="delta")
+        #TASK_ENV.take_action(action=action, action_type="ee")
+        TASK_ENV.take_action(action=action, action_type="cts")
         #TASK_ENV.take_action(action=action)
         observation = TASK_ENV.get_obs()
         obs = encode_obs(observation)
