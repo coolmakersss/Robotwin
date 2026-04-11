@@ -28,7 +28,7 @@ envs/curobo/*
 *.out
 /*.json*
 /*.txt
-*.lock
+**/uv.lock
 **/training_data*
 
 **/lerobot/
