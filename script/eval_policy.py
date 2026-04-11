@@ -270,7 +270,6 @@ def eval_policy(task_name,
         results = generate_episode_descriptions(args["task_name"], episode_info_list, test_num)
         instruction = np.random.choice(results[0][instruction_type])
         TASK_ENV.set_instruction(instruction=instruction)  # set language instruction
-        print("##")
 
         if TASK_ENV.eval_video_path is not None:
             ffmpeg = subprocess.Popen(
@@ -304,9 +303,7 @@ def eval_policy(task_name,
         succ = False
         reset_func(model)
         while TASK_ENV.take_action_cnt < TASK_ENV.step_lim:
-            print("###")
             observation = TASK_ENV.get_obs()
-            print(observation)
             eval_func(TASK_ENV, model, observation)
             if TASK_ENV.eval_success:
                 succ = True
