@@ -28,7 +28,7 @@ python script/eval_policy.py --config policy/$policy_name/deploy_policy.yml \
     --mode ${mode} \
     --seed ${seed}
 
-# bash eval.sh grab_roller demo_clean aloha-agilex_clean_50 50 16 eef 0 0
+# c
 # bash eval.sh grab_roller demo_clean arx-x5_clean_50 50 16 eef 0 0
 # bash eval.sh lift_pot demo_clean aloha-agilex_clean_50 50 16 eef 0 0
 # bash eval.sh lift_pot demo_clean arx-x5_clean_50 50 16 eef 0 0
