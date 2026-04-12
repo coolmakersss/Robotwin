@@ -10,6 +10,78 @@ sys.path.append(parent_directory)
 from pi_model import *
 
 
+def rotation_6d_to_quaternion(rotation_6d):
+    from scipy.spatial.transform import Rotation as R
+
+    rotation_6d = np.asarray(rotation_6d, dtype=np.float64)
+    single_action = rotation_6d.ndim == 1
+    rotation_6d = rotation_6d.reshape(-1, 6)
+
+    first_column = rotation_6d[:, :3]
+    second_column = rotation_6d[:, 3:]
+
+    first_column = first_column / np.clip(np.linalg.norm(first_column, axis=1, keepdims=True), 1e-8, None)
+    second_column = second_column - np.sum(first_column * second_column, axis=1, keepdims=True) * first_column
+    second_column = second_column / np.clip(np.linalg.norm(second_column, axis=1, keepdims=True), 1e-8, None)
+    third_column = np.cross(first_column, second_column, axis=1)
+
+    rotation_matrix = np.stack((first_column, second_column, third_column), axis=-1)
+    quaternion = R.from_matrix(rotation_matrix).as_quat()
+    return quaternion[0] if single_action else quaternion
+
+
+def ee_10d_to_ee(action):
+    action = np.asarray(action)
+    single_action = action.ndim == 1
+    action = action.reshape(-1, 20)
+
+    left_position = action[:, :3]
+    left_quaternion = rotation_6d_to_quaternion(action[:, 3:9])
+    left_gripper = action[:, 9:10]
+    right_position = action[:, 10:13]
+    right_quaternion = rotation_6d_to_quaternion(action[:, 13:19])
+    right_gripper = action[:, 19:20]
+
+    ee_action = np.concatenate(
+        [left_position, left_quaternion, left_gripper, right_position, right_quaternion, right_gripper],
+        axis=1,
+    )
+    ee_action = ee_action.astype(action.dtype, copy=False)
+    return ee_action[0] if single_action else ee_action
+
+
+def quaternion_to_rotation_6d(quaternion):
+    from scipy.spatial.transform import Rotation as R
+
+    quaternion = np.asarray(quaternion, dtype=np.float64)
+    single_pose = quaternion.ndim == 1
+    quaternion = quaternion.reshape(-1, 4)
+
+    rotation_6d = R.from_quat(quaternion).as_matrix()[:, :, :2].transpose(0, 2, 1).reshape(-1, 6)
+    rotation_6d = rotation_6d.astype(quaternion.dtype, copy=False)
+    return rotation_6d[0] if single_pose else rotation_6d
+
+
+def ee_to_ee_10d(state):
+    state = np.asarray(state)
+    single_state = state.ndim == 1
+    state = state.reshape(-1, 16)
+
+    left_position = state[:, :3]
+    left_rotation_6d = quaternion_to_rotation_6d(state[:, 3:7])
+    left_gripper = state[:, 7:8]
+    right_position = state[:, 8:11]
+    right_rotation_6d = quaternion_to_rotation_6d(state[:, 11:15])
+    right_gripper = state[:, 15:16]
+
+    state_10d = np.concatenate(
+        [left_position, left_rotation_6d, left_gripper, right_position, right_rotation_6d, right_gripper],
+        axis=1,
+    )
+    state_10d = state_10d.astype(state.dtype, copy=False)
+    return state_10d[0] if single_state else state_10d
+
+
 
 def cal_cts(end_pose_vector):
     from scipy.spatial.transform import Rotation as R
@@ -85,6 +157,31 @@ def eval(TASK_ENV, model, observation):
             #TASK_ENV.take_action(action, action_type="cts")
             observation = TASK_ENV.get_obs()
             input_rgb_arr, input_state = encode_obs(observation)
+            #model.update_observation_window(input_rgb_arr, input_state)
+            model.call(func_name="update_observation_window", obs = (input_rgb_arr, input_state))
+
+    if action_type == "ee_10d":
+        #if model.observation_window is None:
+        instruction = TASK_ENV.get_instruction()
+        model.call(func_name="set_language",obs=instruction)
+
+        input_rgb_arr, input_state = encode_obs(observation)
+        input_state = ee_to_ee_10d(input_state)
+        model.call(func_name="update_observation_window", obs = (input_rgb_arr, input_state))
+
+        # ======== Get Action ========
+
+        #actions = model.call(func_name='get_action')[:model.pi0_step]
+        actions = model.call(func_name='get_action')[:20]
+        actions = ee_10d_to_ee(actions)
+        print(actions[0])
+
+        for action in actions:
+            TASK_ENV.take_action(action, action_type="ee")
+            #TASK_ENV.take_action(action, action_type="cts")
+            observation = TASK_ENV.get_obs()
+            input_rgb_arr, input_state = encode_obs(observation)
+            input_state = ee_to_ee_10d(input_state)
             #model.update_observation_window(input_rgb_arr, input_state)
             model.call(func_name="update_observation_window", obs = (input_rgb_arr, input_state))
 

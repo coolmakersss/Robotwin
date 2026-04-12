@@ -59,6 +59,8 @@ def create_empty_dataset(
         "right_wrist_rotate",
         "right_gripper",
     ]
+
+    # 16d action space: x, y, z, euler_w, euler_x, euler_y, euler_z, gripper_state for each arm
     motors = [
         "right_x",
         "right_y",
@@ -76,6 +78,30 @@ def create_empty_dataset(
         "left_euler_y",
         "left_euler_z",
         "left_gripper",
+    ]
+
+    # 20d action space: x, y, z, 6d rotation, gripper_state for each arm
+    motors = [
+        "left_x",
+        "left_y",
+        "left_z",
+        "left_6d_0",
+        "left_6d_1",
+        "left_6d_2",
+        "left_6d_3",
+        "left_6d_4",
+        "left_6d_5",
+        "left_gripper",
+        "right_x",
+        "right_y",
+        "right_z",
+        "right_6d_0",
+        "right_6d_1",
+        "right_6d_2",
+        "right_6d_3",
+        "right_6d_4",
+        "right_6d_5",
+        "right_gripper",
     ]
 
     cameras = [

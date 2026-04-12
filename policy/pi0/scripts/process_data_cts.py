@@ -38,7 +38,7 @@ def cal_cts(end_pose_vector, Qa_last):
     Qa = mid_rotation_scipy(R1_true, R2_true, t=0.5)
     if np.dot(Qa, Qa_last) < -1e-4:
         Qa = -Qa
-    cts_pose_state = np.concatenate([Pa, Qa, Pr, Qr, end_pose_vector[7:8], end_pose_vector[15:16]])
+    cts_pose_state = np.concatenate([Pa, Qa, end_pose_vector[7:8], Pr, Qr, end_pose_vector[15:16]])
     return cts_pose_state
 
 def load_hdf5(dataset_path):
@@ -170,8 +170,8 @@ def data_transform(path, episode_num, save_path):
                 #action = state_eef # eef action
                 action = state_cts # cts action
                 actions.append(action)
-                left_arm_dim.append(left_arm.shape[0])
-                right_arm_dim.append(right_arm.shape[0])
+                left_arm_dim.append(8)
+                right_arm_dim.append(8)
 
         hdf5path = os.path.join(save_path, f"episode_{i}/episode_{i}.hdf5")
 
