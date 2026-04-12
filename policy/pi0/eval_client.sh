@@ -30,3 +30,4 @@ python script/eval_policy_client.py --config policy/$policy_name/deploy_policy.y
     --port 60913
 
 # bash eval.sh grab_roller demo_clean pi0_base_aloha_robotwin_full grab_roller-aloha-agilex_clean_50 0 0
+# bash eval_client.sh grab_roller demo_clean pi0_base_aloha_robotwin_full_chunk_delta_position_10d_action_grab_roller-aloha-agilex_clean_50 grab_roller-aloha-agilex_clean_50-50-10d_action ee_10d 0 0
