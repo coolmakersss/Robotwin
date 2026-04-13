@@ -740,6 +740,142 @@ _CONFIGS = [
         fsdp_devices=1,  # refer line 359
     ),
 
+
+
+    TrainConfig(
+        name="pi0_base_aloha_robotwin_full_chunk_delta_cts_position_10d_action_grab_roller-aloha-agilex_clean_50",
+        model=pi0.Pi0Config(),
+        data=LeRobotAlohaDataConfig(
+            ############################# for 10d action: 3d pos + 6d rot + 1d gripper per arm #############
+            repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/grab_roller-aloha-agilex_clean_50-50-cts-10d_action",  # your datasets repo_id
+            raw_action_dim=20,
+            adapt_to_pi=False,
+            use_delta_joint_actions=True,
+            delta_action_mask=_transforms.make_bool_mask(3, -7, 3, -7),
+            repack_transforms=_transforms.Group(inputs=[
+                _transforms.RepackTransform({
+                    "images": {
+                        "cam_high": "observation.images.cam_high",
+                        "cam_left_wrist": "observation.images.cam_left_wrist",
+                        "cam_right_wrist": "observation.images.cam_right_wrist",
+                    },
+                    "state": "observation.state",
+                    "actions": "action",
+                    "prompt": "prompt",
+                })
+            ]),
+            base_config=DataConfig(
+                local_files_only=True,  # Set to True for local-only datasets.
+                prompt_from_task=True,  # Set to True for prompt by task_name
+            ),
+        ),
+        freeze_filter=pi0.Pi0Config().get_freeze_filter(),
+        batch_size=32,  # the total batch_size not pre_gpu batch_size
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30000,
+        fsdp_devices=1,  # refer line 359
+    ),
+
+    TrainConfig(
+        name="pi0_base_aloha_robotwin_full_chunk_delta_cts_position_10d_action_grab_roller-arx-x5_clean_50",
+        model=pi0.Pi0Config(),
+        data=LeRobotAlohaDataConfig(
+            ############################# for 10d action: 3d pos + 6d rot + 1d gripper per arm #############
+            repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/grab_roller-arx-x5_clean_50-50-cts-10d_action",  # your datasets repo_id
+            raw_action_dim=20,
+            adapt_to_pi=False,
+            use_delta_joint_actions=True,
+            delta_action_mask=_transforms.make_bool_mask(3, -7, 3, -7),
+            repack_transforms=_transforms.Group(inputs=[
+                _transforms.RepackTransform({
+                    "images": {
+                        "cam_high": "observation.images.cam_high",
+                        "cam_left_wrist": "observation.images.cam_left_wrist",
+                        "cam_right_wrist": "observation.images.cam_right_wrist",
+                    },
+                    "state": "observation.state",
+                    "actions": "action",
+                    "prompt": "prompt",
+                })
+            ]),
+            base_config=DataConfig(
+                local_files_only=True,  # Set to True for local-only datasets.
+                prompt_from_task=True,  # Set to True for prompt by task_name
+            ),
+        ),
+        freeze_filter=pi0.Pi0Config().get_freeze_filter(),
+        batch_size=32,  # the total batch_size not pre_gpu batch_size
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30000,
+        fsdp_devices=1,  # refer line 359
+    ),
+    TrainConfig(
+        name="pi0_base_aloha_robotwin_full_chunk_delta_cts_position_10d_action_lift_pot-aloha-agilex_clean_50",
+        model=pi0.Pi0Config(),
+        data=LeRobotAlohaDataConfig(
+            ############################# for 10d action: 3d pos + 6d rot + 1d gripper per arm #############
+            repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/lift_pot-aloha-agilex_clean_50-50-cts-10d_action",  # your datasets repo_id
+            raw_action_dim=20,
+            adapt_to_pi=False,
+            use_delta_joint_actions=True,
+            delta_action_mask=_transforms.make_bool_mask(3, -7, 3, -7),
+            repack_transforms=_transforms.Group(inputs=[
+                _transforms.RepackTransform({
+                    "images": {
+                        "cam_high": "observation.images.cam_high",
+                        "cam_left_wrist": "observation.images.cam_left_wrist",
+                        "cam_right_wrist": "observation.images.cam_right_wrist",
+                    },
+                    "state": "observation.state",
+                    "actions": "action",
+                    "prompt": "prompt",
+                })
+            ]),
+            base_config=DataConfig(
+                local_files_only=True,  # Set to True for local-only datasets.
+                prompt_from_task=True,  # Set to True for prompt by task_name
+            ),
+        ),
+        freeze_filter=pi0.Pi0Config().get_freeze_filter(),
+        batch_size=32,  # the total batch_size not pre_gpu batch_size
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30000,
+        fsdp_devices=1,  # refer line 359
+    ),
+    TrainConfig(
+        name="pi0_base_aloha_robotwin_full_chunk_delta_cts_position_10d_action_lift_pot-arx-x5_clean_50",
+        model=pi0.Pi0Config(),
+        data=LeRobotAlohaDataConfig(
+            ############################# for 10d action: 3d pos + 6d rot + 1d gripper per arm #############
+            repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/lift_pot-arx-x5_clean_50-50-cts-10d_action",  # your datasets repo_id
+            raw_action_dim=20,
+            adapt_to_pi=False,
+            use_delta_joint_actions=True,
+            delta_action_mask=_transforms.make_bool_mask(3, -7, 3, -7),
+            repack_transforms=_transforms.Group(inputs=[
+                _transforms.RepackTransform({
+                    "images": {
+                        "cam_high": "observation.images.cam_high",
+                        "cam_left_wrist": "observation.images.cam_left_wrist",
+                        "cam_right_wrist": "observation.images.cam_right_wrist",
+                    },
+                    "state": "observation.state",
+                    "actions": "action",
+                    "prompt": "prompt",
+                })
+            ]),
+            base_config=DataConfig(
+                local_files_only=True,  # Set to True for local-only datasets.
+                prompt_from_task=True,  # Set to True for prompt by task_name
+            ),
+        ),
+        freeze_filter=pi0.Pi0Config().get_freeze_filter(),
+        batch_size=32,  # the total batch_size not pre_gpu batch_size
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30000,
+        fsdp_devices=1,  # refer line 359
+    ),
+
     # pi0_fast_base by full
     TrainConfig(
         name="pi0_fast_aloha_robotwin_full",

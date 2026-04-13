@@ -51,3 +51,7 @@ python script/policy_model_server.py --config policy/$policy_name/deploy_policy.
 
 # nohup bash eval_server.sh grab_roller demo_clean pi0_base_aloha_robotwin_full_chunk_delta_position_10d_action_grab_roller-aloha-agilex_clean_50 grab_roller-aloha-agilex_clean_50-chunk_delta_position_10d_action 0 0 &
 
+# nohup bash eval_server.sh grab_roller demo_clean pi0_base_aloha_robotwin_full_chunk_delta_position_10d_action_grab_roller-arx-x5_clean_50 grab_roller-arx-x5_clean_50-chunk_delta_position_10d_action 0 0 &
+
+# nohup bash eval_server.sh lift_pot demo_clean pi0_base_aloha_robotwin_full_chunk_delta_position_10d_action_lift_pot-arx-x5_clean_50 lift_pot-arx-x5_clean_50-chunk_delta_position_10d_action 0 0 &
+

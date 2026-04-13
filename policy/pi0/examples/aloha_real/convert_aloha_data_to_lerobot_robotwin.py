@@ -104,6 +104,31 @@ def create_empty_dataset(
         "right_gripper",
     ]
 
+    # 20d action space: x, y, z, 6d rotation, gripper_state for abs. action and rel. action
+    motors = [
+        "Pa_x",
+        "Pa_y",
+        "Pa_z",
+        "Qa_6d_0",
+        "Qa_6d_1",
+        "Qa_6d_2",
+        "Qa_6d_3",
+        "Qa_6d_4",
+        "Qa_6d_5",
+        "left_gripper",
+        "Pr_x",
+        "Pr_y",
+        "Pr_z",
+        "Qr_6d_0",
+        "Qr_6d_1",
+        "Qr_6d_2",
+        "Qr_6d_3",
+        "Qr_6d_4",
+        "Qr_6d_5",
+        "right_gripper",
+    ]
+
+
     cameras = [
         "cam_high",
         "cam_left_wrist",

@@ -109,7 +109,7 @@ def cal_cts(end_pose_vector):
         return Q_mid
     #Qa = mid_rotation_scipy(R1_true, R2_true, t=0.5)
     Qa = R.from_matrix(R1_true).as_quat()
-    cts_pose_state = np.concatenate([Pa, Qa, Pr, Qr, end_pose_vector[7:8], end_pose_vector[15:16]])
+    cts_pose_state = np.concatenate([Pa, Qa, end_pose_vector[7:8], Pr, Qr, end_pose_vector[15:16]])
     #print(cts_pose_state)
     return cts_pose_state
 
@@ -136,7 +136,7 @@ def get_model(usr_args):
 
 
 def eval(TASK_ENV, model, observation):
-    action_type = "ee_10d"
+    action_type = "cts_10d"
     
     if action_type == "ee":
         #if model.observation_window is None:
@@ -218,6 +218,44 @@ def eval(TASK_ENV, model, observation):
             model.call(func_name="update_observation_window", obs = (input_rgb_arr, input_state))
             last_Qa = input_state[3:7]
 
+    elif action_type == "cts_10d":
+        last_Qa = None
+        #if model.observation_window is None:
+        instruction = TASK_ENV.get_instruction()
+        model.call(func_name="set_language",obs=instruction)
+
+        input_rgb_arr, input_state = encode_obs(observation)
+        input_state = cal_cts(input_state)
+        input_state = ee_to_ee_10d(input_state)
+        model.call(func_name="update_observation_window", obs = (input_rgb_arr, input_state))
+        #last_Qa = input_state[3:7]
+
+        # ======== Get Action ========
+
+        #actions = model.call(func_name='get_action')[:model.pi0_step]
+        actions = model.call(func_name='get_action')[:20]
+        actions = ee_10d_to_ee(actions)
+        # 兼容action_type="cts"控制
+        idx = [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 7, 15]
+        actions = actions[:, idx]
+
+        print(actions[0])
+
+        for action in actions:
+            #TASK_ENV.take_action(action, action_type="ee")
+            TASK_ENV.take_action(action, action_type="cts")
+            observation = TASK_ENV.get_obs()
+            input_rgb_arr, input_state = encode_obs(observation)
+            input_state = cal_cts(input_state)
+            input_state = ee_to_ee_10d(input_state)
+            #if np.dot(last_Qa, input_state[3:7]) < -1e-4:
+                #print(last_Qa)
+                #print(input_state[3:7])
+                #input_state[3:7] = -input_state[3:7]
+                #
+            #model.update_observation_window(input_rgb_arr, input_state)
+            model.call(func_name="update_observation_window", obs = (input_rgb_arr, input_state))
+            #last_Qa = input_state[3:7]
     # ============================
 
 
