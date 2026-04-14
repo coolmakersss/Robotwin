@@ -876,6 +876,40 @@ _CONFIGS = [
         fsdp_devices=1,  # refer line 359
     ),
 
+    TrainConfig(
+        name="pi0_base_aloha_robotwin_full_50_tasks_clean_cts_10d_action",
+        model=pi0.Pi0Config(),
+        data=LeRobotAlohaDataConfig(
+            repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/multi_clean_50-cts-10d_action",
+            adapt_to_pi=False,
+            repack_transforms=_transforms.Group(inputs=[
+                _transforms.RepackTransform({
+                    "images": {
+                        "cam_high": "observation.images.cam_high",
+                        "cam_left_wrist": "observation.images.cam_left_wrist",
+                        "cam_right_wrist": "observation.images.cam_right_wrist",
+                    },
+                    "state": "observation.state",
+                    "actions": "action",
+                    "prompt": "prompt",
+                })
+            ]),
+            base_config=DataConfig(
+                local_files_only=True,
+                prompt_from_task=True,
+            ),
+        ),
+        freeze_filter=pi0.Pi0Config().get_freeze_filter(),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "s3://openpi-assets/checkpoints/pi0_base/params"
+        ),
+        batch_size=128,
+        num_workers=16,
+        save_interval=20000,
+        num_train_steps=300000,
+        fsdp_devices=1,
+    ),
+
     # pi0_fast_base by full
     TrainConfig(
         name="pi0_fast_aloha_robotwin_full",
