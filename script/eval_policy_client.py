@@ -233,6 +233,7 @@ def main(usr_args):
     # checkpoint_num = usr_args['checkpoint_num']
     policy_name = usr_args["policy_name"]
     instruction_type = usr_args["instruction_type"]
+    host = usr_args["host"]
     port = usr_args["port"]
     save_dir = None
     video_save_dir = None
@@ -330,7 +331,7 @@ def main(usr_args):
     topk = 1
 
     # model = get_model(usr_args)
-    model = ModelClient(port=port)
+    model = ModelClient(host=host, port=port)
     st_seed, suc_num = eval_policy(task_name,
                                    TASK_ENV,
                                    args,
@@ -496,6 +497,7 @@ def eval_policy(task_name,
 
 def parse_args_and_config():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--host", type=str, default="180.184.148.133")
     parser.add_argument("--port", type=int)
     parser.add_argument("--config", type=str, required=True)
     parser.add_argument("--overrides", nargs=argparse.REMAINDER)
@@ -504,6 +506,7 @@ def parse_args_and_config():
     with open(args.config, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
+    config['host'] = args.host
     config['port'] = args.port
 
     # Parse overrides
