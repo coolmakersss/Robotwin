@@ -32,19 +32,50 @@ class PI0:
         self.checkpoint_id = checkpoint_id
 
         config = _config.get_config(self.train_config_name)
-
-        specified_path = f"policy/pi0/checkpoints/{self.train_config_name}/{self.model_name}/{self.checkpoint_id}/assets/"
+        checkpoint_dir = self._resolve_checkpoint_dir()
+        specified_path = os.path.join(checkpoint_dir, "assets")
         entries = os.listdir(specified_path)
         assets_id = entries[0]
 
         self.policy = _policy_config.create_trained_policy(
             config,
-            f"policy/pi0/checkpoints/{self.train_config_name}/{self.model_name}/{self.checkpoint_id}",
+            checkpoint_dir,
             robotwin_repo_id=assets_id)
         print("loading model success!")
         self.img_size = (224, 224)
         self.observation_window = None
         self.pi0_step = pi0_step
+
+    def _resolve_checkpoint_dir(self):
+        checkpoint_root = os.path.join(
+            "policy", "pi0", "checkpoints", self.train_config_name, self.model_name
+        )
+        requested_dir = os.path.join(checkpoint_root, str(self.checkpoint_id))
+
+        if os.path.isdir(os.path.join(requested_dir, "assets")):
+            return requested_dir
+
+        available_steps = sorted(
+            [
+                step_name
+                for step_name in os.listdir(checkpoint_root)
+                if step_name.isdigit() and os.path.isdir(os.path.join(checkpoint_root, step_name, "assets"))
+            ],
+            key=int,
+        )
+
+        if not available_steps:
+            raise FileNotFoundError(
+                f"No valid checkpoint with assets found under '{checkpoint_root}'."
+            )
+
+        fallback_step = available_steps[-1]
+        print(
+            f"checkpoint {self.checkpoint_id} not found under '{checkpoint_root}', "
+            f"falling back to latest available checkpoint {fallback_step}."
+        )
+        self.checkpoint_id = int(fallback_step)
+        return os.path.join(checkpoint_root, fallback_step)
 
     # set img_size
     def set_img_size(self, img_size):
