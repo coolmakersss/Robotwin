@@ -881,7 +881,10 @@ _CONFIGS = [
         model=pi0.Pi0Config(),
         data=LeRobotAlohaDataConfig(
             repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/multi_clean_50-cts-10d_action",
+            raw_action_dim=20,
             adapt_to_pi=False,
+            use_delta_joint_actions=True,
+            delta_action_mask=_transforms.make_bool_mask(3, -7, 3, -7),
             repack_transforms=_transforms.Group(inputs=[
                 _transforms.RepackTransform({
                     "images": {
@@ -906,7 +909,7 @@ _CONFIGS = [
         batch_size=128,
         num_workers=16,
         save_interval=20000,
-        num_train_steps=300000,
+        num_train_steps=100000,
         fsdp_devices=1,
     ),
 

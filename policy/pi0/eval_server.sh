@@ -12,8 +12,10 @@ gpu_id=${6}
 server_port=${7:-1234}
 
 export CUDA_VISIBLE_DEVICES=${gpu_id}
+export OPENPI_DATA_HOME=${OPENPI_DATA_HOME:-$HOME/.cache/openpi}
 echo -e "\033[33mgpu id (to use): ${gpu_id}\033[0m"
 echo -e "\033[33mserver port: ${server_port}\033[0m"
+echo -e "\033[33mopenpi cache dir: ${OPENPI_DATA_HOME}\033[0m"
 
 source .venv/bin/activate
 cd ../.. # move to root
