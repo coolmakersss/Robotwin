@@ -46,18 +46,6 @@ append_task_success_rate() {
     echo "| ${current_task_name} | ${success_rate} | ${result_dir} |" >> "${summary_file}"
 }
 
-run_task_group() {
-    local summary_file=$1
-    local batch_eval_id=$2
-    shift 2
-
-    local current_task_name
-    for current_task_name in "$@"; do
-        run_eval "${current_task_name}" "${batch_eval_id}" || return 1
-        append_task_success_rate "${current_task_name}" "${summary_file}" "${batch_eval_id}" || return 1
-    done
-}
-
 append_overall_average() {
     local summary_file=$1
 
@@ -126,8 +114,6 @@ if [[ "${run_all_tasks}" == "true" || "${run_all_tasks}" == "--all-tasks" ]]; th
     batch_eval_id=$(date +"%Y-%m-%d %H:%M:%S")
     summary_dir="eval_result/_all_tasks/${policy_name}/${task_config}/${model_name}/${batch_eval_id}"
     summary_file="${summary_dir}/task_success_rates.md"
-    summary_file_1="${summary_dir}/task_success_rates_part1.md"
-    summary_file_2="${summary_dir}/task_success_rates_part2.md"
     mkdir -p "${summary_dir}"
 
     {
@@ -146,25 +132,12 @@ if [[ "${run_all_tasks}" == "true" || "${run_all_tasks}" == "--all-tasks" ]]; th
 
     echo -e "\033[36mall-task summary will be saved to: ${summary_file}\033[0m"
 
-    mid_index=$(( (${#all_task_names[@]} + 1) / 2 ))
-    task_group_1=( "${all_task_names[@]:0:mid_index}" )
-    task_group_2=( "${all_task_names[@]:mid_index}" )
+    for current_task_name in "${all_task_names[@]}"; do
+        run_eval "${current_task_name}" "${batch_eval_id}" || exit 1
+        append_task_success_rate "${current_task_name}" "${summary_file}" "${batch_eval_id}" || exit 1
+    done
 
-    : > "${summary_file_1}"
-    : > "${summary_file_2}"
-
-    run_task_group "${summary_file_1}" "${batch_eval_id}" "${task_group_1[@]}" &
-    pid_1=$!
-    run_task_group "${summary_file_2}" "${batch_eval_id}" "${task_group_2[@]}" &
-    pid_2=$!
-
-    wait "${pid_1}" || exit 1
-    wait "${pid_2}" || exit 1
-
-    cat "${summary_file_1}" "${summary_file_2}" >> "${summary_file}"
     append_overall_average "${summary_file}"
-
-    rm -f "${summary_file_1}" "${summary_file_2}"
 else
     run_eval "${task_name}"
 fi
