@@ -46,8 +46,41 @@ append_task_success_rate() {
     echo "| ${current_task_name} | ${success_rate} | ${result_dir} |" >> "${summary_file}"
 }
 
+has_task_success_rate() {
+    local current_task_name=$1
+    local summary_file=$2
+
+    [[ -f "${summary_file}" ]] && grep -Fq "| ${current_task_name} |" "${summary_file}"
+}
+
+ensure_summary_header() {
+    local summary_file=$1
+    local batch_eval_id=$2
+
+    if [[ -f "${summary_file}" ]]; then
+        return 0
+    fi
+
+    mkdir -p "$(dirname "${summary_file}")"
+    {
+        echo "# Task Success Rates"
+        echo
+        echo "- Batch timestamp: ${batch_eval_id}"
+        echo "- Policy: ${policy_name}"
+        echo "- Task config: ${task_config}"
+        echo "- Checkpoint: ${model_name}"
+        echo "- Seed: ${seed}"
+        echo "- Server: ${server_host}:${server_port}"
+        echo
+        echo "| Task | Success Rate | Result Dir |"
+        echo "| --- | --- | --- |"
+    } > "${summary_file}"
+}
+
 append_overall_average() {
     local summary_file=$1
+
+    sed -i '/^- Overall average:/d' "${summary_file}"
 
     local overall_average
     overall_average=$(awk -F'|' '
@@ -111,28 +144,36 @@ if [[ "${run_all_tasks}" == "true" || "${run_all_tasks}" == "--all-tasks" ]]; th
 
     echo -e "\033[36mfound ${#all_task_names[@]} tasks for full evaluation\033[0m"
 
-    batch_eval_id=$(date +"%Y-%m-%d %H:%M:%S")
-    summary_dir="eval_result/_all_tasks/${policy_name}/${task_config}/${model_name}/${batch_eval_id}"
-    summary_file="${summary_dir}/task_success_rates.md"
-    mkdir -p "${summary_dir}"
+    summary_root="eval_result/_all_tasks/${policy_name}/${task_config}/${model_name}"
+    latest_summary_file=$(find "${summary_root}" -mindepth 2 -maxdepth 2 -type f -name 'task_success_rates.md' 2>/dev/null | sort | tail -n 1)
 
-    {
-        echo "# Task Success Rates"
-        echo
-        echo "- Batch timestamp: ${batch_eval_id}"
-        echo "- Policy: ${policy_name}"
-        echo "- Task config: ${task_config}"
-        echo "- Checkpoint: ${model_name}"
-        echo "- Seed: ${seed}"
-        echo "- Server: ${server_host}:${server_port}"
-        echo
-        echo "| Task | Success Rate | Result Dir |"
-        echo "| --- | --- | --- |"
-    } > "${summary_file}"
+    if [[ -n "${latest_summary_file}" ]]; then
+        summary_file="${latest_summary_file}"
+        summary_dir=$(dirname "${summary_file}")
+        batch_eval_id=$(basename "${summary_dir}")
+        echo -e "\033[36mresuming all-task evaluation from: ${summary_file}\033[0m"
+    else
+        batch_eval_id=$(date +"%Y-%m-%d %H:%M:%S")
+        summary_dir="${summary_root}/${batch_eval_id}"
+        summary_file="${summary_dir}/task_success_rates.md"
+        echo -e "\033[36mall-task summary will be saved to: ${summary_file}\033[0m"
+    fi
 
-    echo -e "\033[36mall-task summary will be saved to: ${summary_file}\033[0m"
+    ensure_summary_header "${summary_file}" "${batch_eval_id}"
 
     for current_task_name in "${all_task_names[@]}"; do
+        if has_task_success_rate "${current_task_name}" "${summary_file}"; then
+            echo -e "\033[33mskipping completed task: ${current_task_name}\033[0m"
+            continue
+        fi
+
+        result_file="eval_result/${current_task_name}/${policy_name}/${task_config}/${model_name}/${batch_eval_id}/_result.txt"
+        if [[ -f "${result_file}" ]]; then
+            echo -e "\033[33mfound existing result for task: ${current_task_name}, appending to summary\033[0m"
+            append_task_success_rate "${current_task_name}" "${summary_file}" "${batch_eval_id}" || exit 1
+            continue
+        fi
+
         run_eval "${current_task_name}" "${batch_eval_id}" || exit 1
         append_task_success_rate "${current_task_name}" "${summary_file}" "${batch_eval_id}" || exit 1
     done
