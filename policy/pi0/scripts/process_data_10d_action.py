@@ -238,7 +238,7 @@ if __name__ == "__main__":
 
     print(f'read data from path:{os.path.join("data", load_dir)}')
 
-    target_dir = args.save_dir or f"training_data_10d_action/{task_name}-{setting}-{expert_data_num}"
+    target_dir = args.save_dir or f"training_data_50_tasks_10d_action/{task_name}-{setting}-{expert_data_num}"
     data_transform(
         load_dir,
         expert_data_num,

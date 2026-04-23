@@ -80,7 +80,7 @@ class Pi0FASTConfig(_model.BaseModelConfig):
     # Set the model specific defaults.
     action_dim: int = 32
     action_horizon: int = 32
-    max_token_len: int = 250
+    max_token_len: int = 400
 
     @property
     @override

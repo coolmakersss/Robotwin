@@ -1,6 +1,7 @@
 import dataclasses
 import functools
 import logging
+import os
 import platform
 from typing import Any
 
@@ -14,6 +15,7 @@ import jax.numpy as jnp
 import optax
 import tqdm_loggable.auto as tqdm
 import wandb
+from wandb.errors.errors import CommError
 
 import openpi.models.model as _model
 import openpi.shared.array_typing as at
@@ -25,6 +27,10 @@ import openpi.training.optimizer as _optimizer
 import openpi.training.sharding as sharding
 import openpi.training.utils as training_utils
 import openpi.training.weight_loaders as _weight_loaders
+
+
+_WANDB_REMOTE_MODES = {"online", "shared", "run"}
+_WANDB_VALID_MODES = _WANDB_REMOTE_MODES | {"offline", "disabled", "dryrun"}
 
 
 def init_logging():
@@ -53,6 +59,62 @@ def init_logging():
     logger.handlers[0].setFormatter(formatter)
 
 
+def _get_wandb_mode() -> str:
+    mode = os.environ.get("OPENPI_WANDB_MODE", os.environ.get("WANDB_MODE", "online")).lower()
+    if mode not in _WANDB_VALID_MODES:
+        logging.warning("Unsupported W&B mode %r, defaulting to 'online'.", mode)
+        return "online"
+    return mode
+
+
+def _get_wandb_init_timeout() -> float:
+    raw_timeout = os.environ.get("OPENPI_WANDB_INIT_TIMEOUT", os.environ.get("WANDB_INIT_TIMEOUT", "90"))
+    try:
+        timeout = float(raw_timeout)
+    except ValueError:
+        logging.warning("Invalid W&B init timeout %r, defaulting to 90 seconds.", raw_timeout)
+        return 90.0
+    if timeout <= 0:
+        logging.warning("Non-positive W&B init timeout %r, defaulting to 90 seconds.", raw_timeout)
+        return 90.0
+    return timeout
+
+
+def _make_wandb_init_kwargs(
+    config: _config.TrainConfig,
+    *,
+    wandb_resuming: bool,
+    run_id: str | None,
+    mode: str,
+) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {"project": config.project_name}
+    if wandb_resuming and run_id is not None:
+        kwargs.update(id=run_id, resume="must" if mode in _WANDB_REMOTE_MODES else "allow")
+        return kwargs
+
+    kwargs.update(
+        name=config.exp_name,
+        config=dataclasses.asdict(config),
+    )
+    if run_id is not None:
+        kwargs.update(id=run_id, resume="allow")
+    return kwargs
+
+
+def _wandb_init(
+    config: _config.TrainConfig,
+    *,
+    wandb_resuming: bool,
+    run_id: str | None,
+    mode: str,
+    init_timeout: float,
+):
+    return wandb.init(
+        settings=wandb.Settings(mode=mode, init_timeout=init_timeout),
+        **_make_wandb_init_kwargs(config, wandb_resuming=wandb_resuming, run_id=run_id, mode=mode),
+    )
+
+
 def init_wandb(
     config: _config.TrainConfig,
     *,
@@ -64,22 +126,56 @@ def init_wandb(
         wandb.init(mode="disabled")
         return
 
+    wandb_mode = _get_wandb_mode()
+    init_timeout = _get_wandb_init_timeout()
     ckpt_dir = config.checkpoint_dir
     if not ckpt_dir.exists():
         raise FileNotFoundError(f"Checkpoint directory {ckpt_dir} does not exist.")
+
+    run_id_path = ckpt_dir / "wandb_id.txt"
+    run_id = None
+    wandb_resuming = False
     if resuming:
-        run_id = (ckpt_dir / "wandb_id.txt").read_text().strip()
-        wandb.init(id=run_id, resume="must", project=config.project_name)
-    else:
-        wandb.init(
-            name=config.exp_name,
-            config=dataclasses.asdict(config),
-            project=config.project_name,
+        if run_id_path.exists():
+            run_id = run_id_path.read_text().strip() or None
+            wandb_resuming = run_id is not None
+            if not wandb_resuming:
+                logging.warning("W&B run id file %s is empty; starting a new run.", run_id_path)
+        else:
+            logging.warning("W&B run id file %s not found; starting a new run.", run_id_path)
+
+    active_mode = wandb_mode
+    try:
+        run = _wandb_init(
+            config,
+            wandb_resuming=wandb_resuming,
+            run_id=run_id,
+            mode=wandb_mode,
+            init_timeout=init_timeout,
         )
-        (ckpt_dir / "wandb_id.txt").write_text(wandb.run.id)
+    except (CommError, TimeoutError) as e:
+        if wandb_mode not in _WANDB_REMOTE_MODES:
+            raise
+        active_mode = "offline"
+        logging.warning(
+            "W&B initialization failed in %s mode after %.1f seconds: %s. Falling back to offline mode.",
+            wandb_mode,
+            init_timeout,
+            e,
+        )
+        run = _wandb_init(
+            config,
+            wandb_resuming=wandb_resuming,
+            run_id=run_id,
+            mode=active_mode,
+            init_timeout=init_timeout,
+        )
+
+    if active_mode != "disabled" and not wandb_resuming:
+        run_id_path.write_text(run.id)
 
     if log_code:
-        wandb.run.log_code(epath.Path(__file__).parent.parent)
+        run.log_code(epath.Path(__file__).parent.parent)
 
 
 def _load_weights_and_validate(loader: _weight_loaders.WeightLoader, params_shape: at.Params) -> at.Params:
