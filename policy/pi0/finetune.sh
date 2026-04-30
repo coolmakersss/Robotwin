@@ -7,4 +7,4 @@ export CUDA_VISIBLE_DEVICES=$gpu_use
 #export https_proxy="http://127.0.0.1:1081"
 
 echo $CUDA_VISIBLE_DEVICES
-XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py $train_config_name --exp-name=$model_name --overwrite
+XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 PYTHONDONTWRITEBYTECODE=1 uv run scripts/train.py $train_config_name --exp-name=$model_name --overwrite

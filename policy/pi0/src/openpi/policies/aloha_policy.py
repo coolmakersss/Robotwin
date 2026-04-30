@@ -95,6 +95,10 @@ class AlohaInputs(transforms.DataTransformFn):
         if "prompt" in data:
             inputs["prompt"] = data["prompt"]
 
+        for aux_key in ("mode", "ratio"):
+            if aux_key in data:
+                inputs[aux_key] = np.asarray(data[aux_key])
+
         return inputs
 
 

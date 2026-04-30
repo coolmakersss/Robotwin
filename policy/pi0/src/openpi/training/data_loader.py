@@ -134,7 +134,9 @@ def create_data_loader(
     shuffle: bool = False,
     num_batches: int | None = None,
     num_workers: int = 0,
-) -> DataLoader[tuple[_model.Observation, _model.Actions]]:
+) -> DataLoader[
+    tuple[_model.Observation, _model.Actions] | tuple[_model.Observation, _model.Actions, _model.AuxTargets]
+]:
     """Create a data loader for training.
 
     Args:
@@ -175,9 +177,37 @@ def create_data_loader(
 
         def __iter__(self):
             for batch in self._data_loader:
-                yield _model.Observation.from_dict(batch), batch["actions"]
+                aux_targets = _extract_aux_targets(batch, self._data_config.aux_target_keys)
+                observation = _model.Observation.from_dict(batch)
+                if aux_targets is None:
+                    yield observation, batch["actions"]
+                else:
+                    yield observation, batch["actions"], aux_targets
 
     return DataLoaderImpl(data_config, data_loader)
+
+
+def _extract_aux_targets(batch: dict, aux_target_keys: Sequence[str]) -> _model.AuxTargets | None:
+    if not aux_target_keys:
+        return None
+
+    aux_data = {}
+    for key in aux_target_keys:
+        if key not in batch:
+            raise ValueError(f"Aux target key '{key}' not found in batch. Available keys: {tuple(batch)}")
+        aux_data[key] = batch.pop(key)
+
+    mode = aux_data.get("mode")
+    if mode is not None:
+        mode = mode.astype(jnp.int32)
+        if mode.ndim == 1:
+            mode = mode[..., None]
+
+    ratio = aux_data.get("ratio")
+    if ratio is not None:
+        ratio = ratio.astype(jnp.float32)
+
+    return _model.AuxTargets(mode=mode, ratio=ratio)
 
 
 class TorchDataLoader:

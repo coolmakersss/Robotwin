@@ -133,6 +133,67 @@ class Observation(Generic[ArrayT]):
 Actions = at.Float[ArrayT, "*b ah ad"]
 
 
+@struct.dataclass
+class AuxTargets(Generic[ArrayT]):
+    """Optional auxiliary labels used only during training."""
+
+    mode: at.Int[ArrayT, "*b 1"] | None = None
+    ratio: at.Float[ArrayT, "*b r"] | None = None
+
+
+def compute_mode_ratio_aux_loss(
+    mode_logits: at.Array | None,
+    ratio_pred: at.Array | None,
+    aux_targets: AuxTargets | None,
+    *,
+    mode_loss_weight: float,
+    ratio_loss_weight: float,
+) -> tuple[at.Array | None, dict[str, at.Array]]:
+    if aux_targets is None:
+        return None, {}
+
+    losses = []
+    metrics = {}
+
+    if mode_logits is not None and aux_targets.mode is not None:
+        mode_targets = jnp.squeeze(aux_targets.mode, axis=-1).astype(jnp.int32)
+        mode_logp = jax.nn.log_softmax(mode_logits.astype(jnp.float32), axis=-1)
+        mode_loss = -jnp.take_along_axis(mode_logp, mode_targets[..., None], axis=-1)[..., 0]
+        weighted_mode_loss = mode_loss_weight * mode_loss
+        losses.append(weighted_mode_loss)
+        metrics["loss/aux_mode"] = jnp.mean(mode_loss)
+        metrics["acc/aux_mode"] = jnp.mean((jnp.argmax(mode_logits, axis=-1) == mode_targets).astype(jnp.float32))
+
+    if ratio_pred is not None and aux_targets.ratio is not None:
+        ratio_targets = aux_targets.ratio.astype(jnp.float32)
+        ratio_valid = jnp.sum(ratio_targets, axis=-1) > 0.0
+        ratio_loss = jnp.mean(
+            jnp.square(ratio_pred.astype(jnp.float32) - ratio_targets),
+            axis=-1,
+        )
+        ratio_loss = ratio_loss * ratio_valid.astype(jnp.float32)
+        weighted_ratio_loss = ratio_loss_weight * ratio_loss
+        losses.append(weighted_ratio_loss)
+        metrics["loss/aux_ratio"] = jnp.sum(ratio_loss) / jnp.maximum(jnp.sum(ratio_valid), 1)
+
+    if not losses:
+        return None, metrics
+
+    aux_loss = losses[0]
+    for loss in losses[1:]:
+        aux_loss = aux_loss + loss
+    metrics["loss/aux"] = jnp.mean(aux_loss)
+    return aux_loss, metrics
+
+
+def add_aux_loss(base_loss: at.Array, aux_loss: at.Array | None) -> at.Array:
+    if aux_loss is None:
+        return base_loss
+    while aux_loss.ndim < base_loss.ndim:
+        aux_loss = aux_loss[..., None]
+    return base_loss + aux_loss
+
+
 def preprocess_observation(
     rng: at.KeyArrayLike | None,
     observation: Observation,
@@ -265,6 +326,18 @@ class BaseModel(nnx.Module, abc.ABC):
         train: bool = False,
     ) -> at.Float[at.Array, "*b ah"]:
         ...
+
+    def compute_loss_and_metrics(
+        self,
+        rng: at.KeyArrayLike,
+        observation: Observation,
+        actions: Actions,
+        *,
+        aux_targets: AuxTargets | None = None,
+        train: bool = False,
+    ) -> tuple[at.Float[at.Array, "*b ah"], dict[str, at.Array]]:
+        del aux_targets
+        return self.compute_loss(rng, observation, actions, train=train), {}
 
     @abc.abstractmethod
     def sample_actions(self, rng: at.KeyArrayLike, observation: Observation) -> Actions:

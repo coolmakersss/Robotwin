@@ -1,10 +1,11 @@
-import importlib.util
 import json
 import logging
 import os
 import pathlib
+import types
 
 from huggingface_hub import try_to_load_from_cache
+from huggingface_hub.errors import HFValidationError
 import numpy as np
 import sentencepiece
 from transformers import AutoProcessor, PreTrainedTokenizerFast
@@ -59,8 +60,14 @@ def _resolve_snapshot_dir(path_or_repo_id: str) -> pathlib.Path | None:
             for candidate in sorted(snapshots_dir.iterdir()):
                 if candidate.is_dir() and (candidate / _FAST_PROCESSOR_CONFIG).is_file():
                     return candidate.resolve()
+        return None
 
-    cached_processor = try_to_load_from_cache(path_or_repo_id, _FAST_PROCESSOR_CONFIG)
+    try:
+        cached_processor = try_to_load_from_cache(path_or_repo_id, _FAST_PROCESSOR_CONFIG)
+    except HFValidationError:
+        if path.is_absolute() or path_or_repo_id.startswith("."):
+            return None
+        raise
     if isinstance(cached_processor, str):
         return pathlib.Path(cached_processor).expanduser().parent.resolve()
 
@@ -84,12 +91,11 @@ def _load_fast_processor_from_local_dir(tokenizer_dir: pathlib.Path):
     if not config_path.is_file():
         raise FileNotFoundError(f"FAST processor config not found at {config_path}")
 
-    spec = importlib.util.spec_from_file_location("openpi_fast_processing_action_tokenizer", module_path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Unable to create import spec for {module_path}")
-
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    # Load from source so a stale/corrupt __pycache__ entry in the HF snapshot
+    # cannot shadow the real processor implementation.
+    module = types.ModuleType("openpi_fast_processing_action_tokenizer")
+    module.__file__ = str(module_path)
+    exec(compile(module_path.read_text(encoding="utf-8"), str(module_path), "exec"), module.__dict__)
     processor_class = getattr(module, "UniversalActionProcessor", None)
     if processor_class is None:
         raise AttributeError(f"UniversalActionProcessor is missing from {module_path}")

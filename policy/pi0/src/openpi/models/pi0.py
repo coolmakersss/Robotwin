@@ -73,6 +73,12 @@ class Pi0Config(_model.BaseModelConfig):
     action_dim: int = 32
     action_horizon: int = 50
     max_token_len: int = 48
+    predict_mode_ratio: bool = False
+    mode_ratio_num_modes: int = 6
+    mode_ratio_ratio_dim: int = 3
+    mode_ratio_hidden_dim: int = 128
+    mode_loss_weight: float = 0.05
+    ratio_loss_weight: float = 0.05
 
     @property
     @override
@@ -132,6 +138,36 @@ class Pi0Config(_model.BaseModelConfig):
         return nnx.All(*filters)
 
 
+class CTSAuxHead(nnx.Module):
+
+    def __init__(
+        self,
+        in_features: int,
+        *,
+        num_modes: int = 6,
+        num_ratios: int = 3,
+        hidden_dim: int = 128,
+        rngs: nnx.Rngs,
+    ):
+        self.norm = nnx.LayerNorm(in_features, rngs=rngs)
+        self.proj = nnx.Linear(in_features, hidden_dim, rngs=rngs)
+        self.mode_out = nnx.Linear(hidden_dim, num_modes, rngs=rngs)
+        self.ratio_proj = nnx.Linear(hidden_dim, hidden_dim, rngs=rngs)
+        self.ratio_out = nnx.Linear(hidden_dim, num_ratios, rngs=rngs)
+
+    def __call__(self, h: at.Array) -> tuple[at.Array, at.Array]:
+        z = self.norm(h)
+        z = self.proj(z)
+        z = nnx.gelu(z)
+
+        mode_logits = self.mode_out(z)
+
+        r = self.ratio_proj(z)
+        r = nnx.gelu(r)
+        ratio_pred = nnx.softmax(self.ratio_out(r), axis=-1)
+        return mode_logits, ratio_pred
+
+
 class Pi0(_model.BaseModel):
 
     def __init__(self, config: Pi0Config, rngs: nnx.Rngs):
@@ -160,6 +196,18 @@ class Pi0(_model.BaseModel):
         self.action_time_mlp_in = nnx.Linear(2 * action_expert_config.width, action_expert_config.width, rngs=rngs)
         self.action_time_mlp_out = nnx.Linear(action_expert_config.width, action_expert_config.width, rngs=rngs)
         self.action_out_proj = nnx.Linear(action_expert_config.width, config.action_dim, rngs=rngs)
+
+        self.predict_mode_ratio = config.predict_mode_ratio
+        self.mode_loss_weight = config.mode_loss_weight
+        self.ratio_loss_weight = config.ratio_loss_weight
+        if self.predict_mode_ratio:
+            self.aux_head = CTSAuxHead(
+                action_expert_config.width,
+                num_modes=config.mode_ratio_num_modes,
+                num_ratios=config.mode_ratio_ratio_dim,
+                hidden_dim=config.mode_ratio_hidden_dim,
+                rngs=rngs,
+            )
 
     @at.typecheck
     def embed_prefix(
@@ -225,13 +273,14 @@ class Pi0(_model.BaseModel):
         ar_mask = jnp.array(ar_mask)
         return tokens, input_mask, ar_mask
 
-    @override
-    def compute_loss(self,
-                     rng: at.KeyArrayLike,
-                     observation: _model.Observation,
-                     actions: _model.Actions,
-                     *,
-                     train: bool = False) -> at.Float[at.Array, "*b ah"]:
+    def _compute_action_loss_and_aux_hidden(
+        self,
+        rng: at.KeyArrayLike,
+        observation: _model.Observation,
+        actions: _model.Actions,
+        *,
+        train: bool = False,
+    ) -> tuple[at.Float[at.Array, "*b ah"], at.Float[at.Array, "b emb"]]:
         preprocess_rng, noise_rng, time_rng = jax.random.split(rng, 3)
         observation = _model.preprocess_observation(preprocess_rng, observation, train=train)
 
@@ -254,7 +303,43 @@ class Pi0(_model.BaseModel):
                                                          positions=positions)
         v_t = self.action_out_proj(suffix_out[:, -self.action_horizon:])
 
-        return jnp.mean(jnp.square(v_t - u_t), axis=-1)
+        return jnp.mean(jnp.square(v_t - u_t), axis=-1), suffix_out[:, 0]
+
+    @override
+    def compute_loss(self,
+                     rng: at.KeyArrayLike,
+                     observation: _model.Observation,
+                     actions: _model.Actions,
+                     *,
+                     train: bool = False) -> at.Float[at.Array, "*b ah"]:
+        action_loss, _ = self._compute_action_loss_and_aux_hidden(rng, observation, actions, train=train)
+        return action_loss
+
+    @override
+    def compute_loss_and_metrics(
+        self,
+        rng: at.KeyArrayLike,
+        observation: _model.Observation,
+        actions: _model.Actions,
+        *,
+        aux_targets: _model.AuxTargets | None = None,
+        train: bool = False,
+    ) -> tuple[at.Float[at.Array, "*b ah"], dict[str, at.Array]]:
+        action_loss, aux_hidden = self._compute_action_loss_and_aux_hidden(rng, observation, actions, train=train)
+        metrics = {"loss/action": jnp.mean(action_loss)}
+        mode_logits = None
+        ratio_pred = None
+        if self.predict_mode_ratio:
+            mode_logits, ratio_pred = self.aux_head(aux_hidden)
+        aux_loss, aux_metrics = _model.compute_mode_ratio_aux_loss(
+            mode_logits,
+            ratio_pred,
+            aux_targets,
+            mode_loss_weight=self.mode_loss_weight,
+            ratio_loss_weight=self.ratio_loss_weight,
+        )
+        metrics.update(aux_metrics)
+        return _model.add_aux_loss(action_loss, aux_loss), metrics
 
     @override
     def sample_actions(
