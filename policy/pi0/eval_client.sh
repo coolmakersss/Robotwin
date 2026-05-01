@@ -17,7 +17,7 @@ export CUDA_VISIBLE_DEVICES=${gpu_id}
 echo -e "\033[33mgpu id (to use): ${gpu_id}\033[0m"
 echo -e "\033[33mserver host: ${server_host}\033[0m"
 echo -e "\033[33mserver port: ${server_port}\033[0m"
-echo -e "\033[33mrun all 50 tasks: ${run_all_tasks}\033[0m"
+echo -e "\033[33mbatch eval mode: ${run_all_tasks}\033[0m"
 
 source .venv/bin/activate
 cd ../.. # move to root
@@ -56,6 +56,7 @@ has_task_success_rate() {
 ensure_summary_header() {
     local summary_file=$1
     local batch_eval_id=$2
+    local task_group=${3:-}
 
     if [[ -f "${summary_file}" ]]; then
         return 0
@@ -71,6 +72,9 @@ ensure_summary_header() {
         echo "- Checkpoint: ${model_name}"
         echo "- Seed: ${seed}"
         echo "- Server: ${server_host}:${server_port}"
+        if [[ -n "${task_group}" ]]; then
+            echo "- Task group: ${task_group}"
+        fi
         echo
         echo "| Task | Success Rate | Result Dir |"
         echo "| --- | --- | --- |"
@@ -134,7 +138,10 @@ run_eval() {
     PYTHONWARNINGS=ignore::UserWarning "${cmd[@]}"
 }
 
-if [[ "${run_all_tasks}" == "true" || "${run_all_tasks}" == "--all-tasks" ]]; then
+if [[ "${run_all_tasks}" == "true" || "${run_all_tasks}" == "--all-tasks" || "${run_all_tasks}" == "--coupled-tasks" || "${run_all_tasks}" == "--coupled" ]]; then
+    task_group="all_tasks"
+    summary_group="_all_tasks"
+
     mapfile -t all_task_names < <(
         find envs -maxdepth 1 -type f -name "*.py" \
             ! -name "__init__.py" \
@@ -142,24 +149,48 @@ if [[ "${run_all_tasks}" == "true" || "${run_all_tasks}" == "--all-tasks" ]]; th
             -printf "%f\n" | sed 's/\.py$//' | sort
     )
 
-    echo -e "\033[36mfound ${#all_task_names[@]} tasks for full evaluation\033[0m"
+    if [[ "${run_all_tasks}" == "--coupled-tasks" || "${run_all_tasks}" == "--coupled" ]]; then
+        task_group="coupled_tasks"
+        summary_group="_coupled_tasks"
+        all_task_names=(
+            dump_bin_bigbin
+            handover_block
+            handover_mic
+            hanging_mug
+            pick_diverse_bottles
+            pick_dual_bottles
+            place_bread_basket
+            place_burger_fries
+            place_can_basket
+            place_cans_plasticbox
+            place_dual_shoes
+            place_object_basket
+            put_bottles_dustbin
+            put_object_cabinet
+            scan_object
+            grab_roller
+            lift_pot
+        )
+    fi
 
-    summary_root="eval_result/_all_tasks/${policy_name}/${task_config}/${model_name}"
+    echo -e "\033[36mfound ${#all_task_names[@]} tasks for ${task_group} evaluation\033[0m"
+
+    summary_root="eval_result/${summary_group}/${policy_name}/${task_config}/${model_name}"
     latest_summary_file=$(find "${summary_root}" -mindepth 2 -maxdepth 2 -type f -name 'task_success_rates.md' 2>/dev/null | sort | tail -n 1)
 
     if [[ -n "${latest_summary_file}" ]]; then
         summary_file="${latest_summary_file}"
         summary_dir=$(dirname "${summary_file}")
         batch_eval_id=$(basename "${summary_dir}")
-        echo -e "\033[36mresuming all-task evaluation from: ${summary_file}\033[0m"
+        echo -e "\033[36mresuming ${task_group} evaluation from: ${summary_file}\033[0m"
     else
         batch_eval_id=$(date +"%Y-%m-%d %H:%M:%S")
         summary_dir="${summary_root}/${batch_eval_id}"
         summary_file="${summary_dir}/task_success_rates.md"
-        echo -e "\033[36mall-task summary will be saved to: ${summary_file}\033[0m"
+        echo -e "\033[36m${task_group} summary will be saved to: ${summary_file}\033[0m"
     fi
 
-    ensure_summary_header "${summary_file}" "${batch_eval_id}"
+    ensure_summary_header "${summary_file}" "${batch_eval_id}" "${task_group}"
 
     for current_task_name in "${all_task_names[@]}"; do
         if has_task_success_rate "${current_task_name}" "${summary_file}"; then
@@ -187,3 +218,4 @@ fi
 # bash eval_client.sh grab_roller demo_clean pi0_base_aloha_robotwin_full_chunk_delta_position_10d_action_grab_roller-aloha-agilex_clean_50 grab_roller-aloha-agilex_clean_50-50-10d_action ee_10d 0 0
 # bash eval_client.sh grab_roller demo_clean pi0_base_aloha_robotwin_full_chunk_delta_position_10d_action_grab_roller-aloha-agilex_clean_50 grab_roller-aloha-agilex_clean_50-50-10d_action ee_10d 0 0 127.0.0.1 1234
 # bash eval_client.sh placeholder demo_clean pi0_base_aloha_robotwin_full_50_tasks_clean_cts_10d_action multi_clean_50-cts-10d_action ee_10d 0 127.0.0.1 1234 --all-tasks
+# bash eval_client.sh placeholder demo_clean pi0_base_aloha_robotwin_full_50_tasks_clean_cts_10d_action multi_clean_50-cts-10d_action ee_10d 0 127.0.0.1 1234 --coupled-tasks
