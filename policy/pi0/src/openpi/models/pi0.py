@@ -74,6 +74,7 @@ class Pi0Config(_model.BaseModelConfig):
     action_horizon: int = 50
     max_token_len: int = 48
     predict_mode_ratio: bool = False
+    mode_ratio_use_aux_token: bool = False
     mode_ratio_num_modes: int = 6
     mode_ratio_ratio_dim: int = 3
     mode_ratio_hidden_dim: int = 128
@@ -198,8 +199,16 @@ class Pi0(_model.BaseModel):
         self.action_out_proj = nnx.Linear(action_expert_config.width, config.action_dim, rngs=rngs)
 
         self.predict_mode_ratio = config.predict_mode_ratio
+        self.mode_ratio_use_aux_token = config.predict_mode_ratio and config.mode_ratio_use_aux_token
         self.mode_loss_weight = config.mode_loss_weight
         self.ratio_loss_weight = config.ratio_loss_weight
+        if self.mode_ratio_use_aux_token:
+            self.mode_ratio_aux_token = nnx.Param(
+                jax.random.normal(
+                    rngs.params(),
+                    (1, 1, action_expert_config.width),
+                    dtype=jnp.float32,
+                ) * 0.02)
         if self.predict_mode_ratio:
             self.aux_head = CTSAuxHead(
                 action_expert_config.width,
@@ -255,6 +264,16 @@ class Pi0(_model.BaseModel):
         # image/language inputs do not attend to state or actions
         ar_mask += [True]
 
+        if self.mode_ratio_use_aux_token:
+            aux_token = jnp.broadcast_to(
+                self.mode_ratio_aux_token.value.astype(state_token.dtype),
+                (obs.state.shape[0], 1, state_token.shape[-1]),
+            )
+            tokens.append(aux_token)
+            input_mask.append(jnp.ones((obs.state.shape[0], 1), dtype=jnp.bool_))
+            # The aux token can read image/language/state, and action tokens can read the aux token.
+            ar_mask += [True]
+
         # embed timestep using sine-cosine positional encoding with sensitivity in the range [0, 1]
         time_emb = posemb_sincos(timestep, self.action_in_proj.out_features, min_period=4e-3, max_period=4.0)
         # mix timestep + action information using an MLP
@@ -303,7 +322,8 @@ class Pi0(_model.BaseModel):
                                                          positions=positions)
         v_t = self.action_out_proj(suffix_out[:, -self.action_horizon:])
 
-        return jnp.mean(jnp.square(v_t - u_t), axis=-1), suffix_out[:, 0]
+        aux_hidden_index = 1 if self.mode_ratio_use_aux_token else 0
+        return jnp.mean(jnp.square(v_t - u_t), axis=-1), suffix_out[:, aux_hidden_index]
 
     @override
     def compute_loss(self,
