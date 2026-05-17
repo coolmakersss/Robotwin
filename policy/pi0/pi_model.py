@@ -83,8 +83,10 @@ class PI0:
 
     # set language randomly
     def set_language(self, instruction):
+        should_log = getattr(self, "instruction", None) != instruction
         self.instruction = instruction
-        print(f"successfully set instruction:{instruction}")
+        if should_log:
+            print(f"successfully set instruction:{instruction}")
 
     # Update the observation window buffer
     def update_observation_window(self, img_arr, state):
@@ -111,6 +113,12 @@ class PI0:
     def get_action(self):
         assert self.observation_window is not None, "update observation_window first!"
         return self.policy.infer(self.observation_window)["actions"]
+
+    def infer_action(self, payload):
+        instruction, img_arr, state = payload
+        self.set_language(instruction)
+        self.update_observation_window(img_arr, state)
+        return self.get_action()
 
     def reset_obsrvationwindows(self):
         self.instruction = None

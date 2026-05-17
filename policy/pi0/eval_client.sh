@@ -1,5 +1,8 @@
 #!/bin/bash
 
+#加速评估 bash eval_client.sh ...
+#恢复旧行为和视频 ROBOTWIN_EVAL_VIDEO_LOG=true PI0_UPDATE_OBS_EVERY_ACTION=true bash eval_client.sh ...
+
 export XLA_PYTHON_CLIENT_MEM_FRACTION=0.4 # ensure GPU < 24G
 
 policy_name=pi0
@@ -12,12 +15,24 @@ gpu_id=${6}
 server_host=${7:-180.184.148.133}
 server_port=${8:-60913}
 run_all_tasks=${9:-false}
+test_num=${ROBOTWIN_TEST_NUM:-100}
+eval_video_log=${ROBOTWIN_EVAL_VIDEO_LOG:-false}
+render_freq=${ROBOTWIN_RENDER_FREQ:-0}
+expert_check=${ROBOTWIN_EXPERT_CHECK:-true}
+export PI0_ACTION_CHUNK_STEPS=${PI0_ACTION_CHUNK_STEPS:-20}
+export PI0_UPDATE_OBS_EVERY_ACTION=${PI0_UPDATE_OBS_EVERY_ACTION:-false}
 
 export CUDA_VISIBLE_DEVICES=${gpu_id}
 echo -e "\033[33mgpu id (to use): ${gpu_id}\033[0m"
 echo -e "\033[33mserver host: ${server_host}\033[0m"
 echo -e "\033[33mserver port: ${server_port}\033[0m"
 echo -e "\033[33mbatch eval mode: ${run_all_tasks}\033[0m"
+echo -e "\033[33mtest episodes: ${test_num}\033[0m"
+echo -e "\033[33meval video log: ${eval_video_log}\033[0m"
+echo -e "\033[33mrender freq: ${render_freq}\033[0m"
+echo -e "\033[33mexpert check: ${expert_check}\033[0m"
+echo -e "\033[33maction chunk steps: ${PI0_ACTION_CHUNK_STEPS}\033[0m"
+echo -e "\033[33mupdate obs every action: ${PI0_UPDATE_OBS_EVERY_ACTION}\033[0m"
 
 source .venv/bin/activate
 cd ../.. # move to root
@@ -128,7 +143,11 @@ run_eval() {
         --ckpt_setting ${model_name} \
         --seed ${seed} \
         --policy_name ${policy_name} \
-        --port ${server_port}
+        --port ${server_port} \
+        --test_num ${test_num} \
+        --eval_video_log ${eval_video_log} \
+        --render_freq ${render_freq} \
+        --expert_check ${expert_check}
     )
 
     if [[ -n "${batch_eval_id}" ]]; then

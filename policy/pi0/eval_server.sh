@@ -17,12 +17,12 @@ echo -e "\033[33mgpu id (to use): ${gpu_id}\033[0m"
 echo -e "\033[33mserver port: ${server_port}\033[0m"
 echo -e "\033[33mopenpi cache dir: ${OPENPI_DATA_HOME}\033[0m"
 
-source .venv/bin/activate
+OPENPI_PYTHON=/mnt/afs/huangdi/xiangenda/.venv/bin/python
 cd ../.. # move to root
 
 
 PYTHONWARNINGS=ignore::UserWarning \
-python script/policy_model_server.py --config policy/$policy_name/deploy_policy.yml \
+"${OPENPI_PYTHON}" script/policy_model_server.py --config policy/$policy_name/deploy_policy.yml \
     --overrides \
     --task_name ${task_name} \
     --task_config ${task_config} \

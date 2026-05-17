@@ -10,6 +10,34 @@ sys.path.append(parent_directory)
 from pi_model import *
 
 
+def _env_flag(name, default=False):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _action_chunk_steps(default=20):
+    try:
+        return max(1, int(os.environ.get("PI0_ACTION_CHUNK_STEPS", default)))
+    except ValueError:
+        return default
+
+
+def _update_obs_every_action(task_env):
+    if task_env.eval_video_path is not None:
+        return True
+    return _env_flag("PI0_UPDATE_OBS_EVERY_ACTION", True)
+
+
+def _infer_action_chunk(model, instruction, input_rgb_arr, input_state):
+    actions = model.call(
+        func_name="infer_action",
+        obs=(instruction, input_rgb_arr, input_state),
+    )
+    return actions[:_action_chunk_steps()]
+
+
 def rotation_6d_to_quaternion(rotation_6d):
     from scipy.spatial.transform import Rotation as R
 
@@ -141,99 +169,94 @@ def eval(TASK_ENV, model, observation):
     if action_type == "ee":
         #if model.observation_window is None:
         instruction = TASK_ENV.get_instruction()
-        model.call(func_name="set_language",obs=instruction)
 
         input_rgb_arr, input_state = encode_obs(observation)
-        model.call(func_name="update_observation_window", obs = (input_rgb_arr, input_state))
 
         # ======== Get Action ========
 
         #actions = model.call(func_name='get_action')[:model.pi0_step]
-        actions = model.call(func_name='get_action')[:20]
+        actions = _infer_action_chunk(model, instruction, input_rgb_arr, input_state)
         print(actions[0])
 
         for action in actions:
             TASK_ENV.take_action(action, action_type="ee")
             #TASK_ENV.take_action(action, action_type="cts")
-            observation = TASK_ENV.get_obs()
-            input_rgb_arr, input_state = encode_obs(observation)
-            #model.update_observation_window(input_rgb_arr, input_state)
-            model.call(func_name="update_observation_window", obs = (input_rgb_arr, input_state))
+            if _update_obs_every_action(TASK_ENV):
+                observation = TASK_ENV.get_obs()
+                input_rgb_arr, input_state = encode_obs(observation)
+                #model.update_observation_window(input_rgb_arr, input_state)
+                model.call(func_name="update_observation_window", obs = (input_rgb_arr, input_state))
 
     if action_type == "ee_10d":
         #if model.observation_window is None:
         instruction = TASK_ENV.get_instruction()
-        model.call(func_name="set_language",obs=instruction)
 
         input_rgb_arr, input_state = encode_obs(observation)
         input_state = ee_to_ee_10d(input_state)
-        model.call(func_name="update_observation_window", obs = (input_rgb_arr, input_state))
 
         # ======== Get Action ========
 
         #actions = model.call(func_name='get_action')[:model.pi0_step]
-        actions = model.call(func_name='get_action')[:20]
+        actions = _infer_action_chunk(model, instruction, input_rgb_arr, input_state)
         actions = ee_10d_to_ee(actions)
         print(actions[0])
 
         for action in actions:
             TASK_ENV.take_action(action, action_type="ee")
             #TASK_ENV.take_action(action, action_type="cts")
-            observation = TASK_ENV.get_obs()
-            input_rgb_arr, input_state = encode_obs(observation)
-            input_state = ee_to_ee_10d(input_state)
-            #model.update_observation_window(input_rgb_arr, input_state)
-            model.call(func_name="update_observation_window", obs = (input_rgb_arr, input_state))
+            if _update_obs_every_action(TASK_ENV):
+                observation = TASK_ENV.get_obs()
+                input_rgb_arr, input_state = encode_obs(observation)
+                input_state = ee_to_ee_10d(input_state)
+                #model.update_observation_window(input_rgb_arr, input_state)
+                model.call(func_name="update_observation_window", obs = (input_rgb_arr, input_state))
 
     elif action_type == "cts":
         last_Qa = None
         #if model.observation_window is None:
         instruction = TASK_ENV.get_instruction()
-        model.call(func_name="set_language",obs=instruction)
 
         input_rgb_arr, input_state = encode_obs(observation)
         input_state = cal_cts(input_state)
-        model.call(func_name="update_observation_window", obs = (input_rgb_arr, input_state))
         last_Qa = input_state[3:7]
 
         # ======== Get Action ========
 
         #actions = model.call(func_name='get_action')[:model.pi0_step]
-        actions = model.call(func_name='get_action')[:20]
+        actions = _infer_action_chunk(model, instruction, input_rgb_arr, input_state)
         print(actions[0])
 
         for action in actions:
             #TASK_ENV.take_action(action, action_type="ee")
             TASK_ENV.take_action(action, action_type="cts")
-            observation = TASK_ENV.get_obs()
-            input_rgb_arr, input_state = encode_obs(observation)
-            input_state = cal_cts(input_state)
-            print("@")
-            if np.dot(last_Qa, input_state[3:7]) < -1e-4:
-                print(last_Qa)
-                print(input_state[3:7])
-                input_state[3:7] = -input_state[3:7]
-                #
-            #model.update_observation_window(input_rgb_arr, input_state)
-            model.call(func_name="update_observation_window", obs = (input_rgb_arr, input_state))
-            last_Qa = input_state[3:7]
+            if _update_obs_every_action(TASK_ENV):
+                observation = TASK_ENV.get_obs()
+                input_rgb_arr, input_state = encode_obs(observation)
+                input_state = cal_cts(input_state)
+                print("@")
+                if np.dot(last_Qa, input_state[3:7]) < -1e-4:
+                    print(last_Qa)
+                    print(input_state[3:7])
+                    input_state[3:7] = -input_state[3:7]
+                    #
+                #model.update_observation_window(input_rgb_arr, input_state)
+                model.call(func_name="update_observation_window", obs = (input_rgb_arr, input_state))
+                last_Qa = input_state[3:7]
 
     elif action_type == "cts_10d":
         last_Qa = None
         #if model.observation_window is None:
         instruction = TASK_ENV.get_instruction()
-        model.call(func_name="set_language",obs=instruction)
 
         input_rgb_arr, input_state = encode_obs(observation)
         input_state = cal_cts(input_state)
         input_state = ee_to_ee_10d(input_state)
-        model.call(func_name="update_observation_window", obs = (input_rgb_arr, input_state))
         #last_Qa = input_state[3:7]
 
         # ======== Get Action ========
 
         #actions = model.call(func_name='get_action')[:model.pi0_step]
-        actions = model.call(func_name='get_action')[:20]
+        actions = _infer_action_chunk(model, instruction, input_rgb_arr, input_state)
         actions = ee_10d_to_ee(actions)
         # 兼容action_type="cts"控制
         idx = [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 7, 15]
@@ -244,18 +267,19 @@ def eval(TASK_ENV, model, observation):
         for action in actions:
             #TASK_ENV.take_action(action, action_type="ee")
             TASK_ENV.take_action(action, action_type="cts")
-            observation = TASK_ENV.get_obs()
-            input_rgb_arr, input_state = encode_obs(observation)
-            input_state = cal_cts(input_state)
-            input_state = ee_to_ee_10d(input_state)
-            #if np.dot(last_Qa, input_state[3:7]) < -1e-4:
-                #print(last_Qa)
-                #print(input_state[3:7])
-                #input_state[3:7] = -input_state[3:7]
-                #
-            #model.update_observation_window(input_rgb_arr, input_state)
-            model.call(func_name="update_observation_window", obs = (input_rgb_arr, input_state))
-            #last_Qa = input_state[3:7]
+            if _update_obs_every_action(TASK_ENV):
+                observation = TASK_ENV.get_obs()
+                input_rgb_arr, input_state = encode_obs(observation)
+                input_state = cal_cts(input_state)
+                input_state = ee_to_ee_10d(input_state)
+                #if np.dot(last_Qa, input_state[3:7]) < -1e-4:
+                    #print(last_Qa)
+                    #print(input_state[3:7])
+                    #input_state[3:7] = -input_state[3:7]
+                    #
+                #model.update_observation_window(input_rgb_arr, input_state)
+                model.call(func_name="update_observation_window", obs = (input_rgb_arr, input_state))
+                #last_Qa = input_state[3:7]
     # ============================
 
 

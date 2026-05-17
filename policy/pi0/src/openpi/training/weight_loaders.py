@@ -53,7 +53,7 @@ class CheckpointWeightLoader(WeightLoader):
         # We are loading np.ndarray and relying on the training code to properly convert and shard the params.
         loaded_params = _model.restore_params(download.maybe_download(self.params_path), restore_type=np.ndarray)
         # Add all missing LoRA and optional auxiliary weights.
-        return _merge_params(loaded_params, params, missing_regex=".*(lora|aux_.*head|mode_ratio_aux_token).*")
+        return _merge_params(loaded_params, params, missing_regex=".*(lora|aux_.*head|mode_ratio_.*aux_token).*")
 
 
 @dataclasses.dataclass(frozen=True)

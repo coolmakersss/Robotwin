@@ -23,6 +23,8 @@ import numpy as np
 from typing import Any
 import base64
 
+SOCKET_CHUNK_SIZE = 1 << 20
+
 
 class NumpyEncoder(json.JSONEncoder):
     """JSON encoder extension for numpy types, includes reconstruction metadata"""
@@ -84,6 +86,7 @@ class ModelServer:
     def start(self):
         """Start the model server and listen for incoming client connections"""
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self.server_socket.bind((self.host, self.port))
         self.server_socket.settimeout(self.wait_interval)
         self.server_socket.listen(5)
@@ -111,6 +114,7 @@ class ModelServer:
         while self.running:
             try:
                 client_socket, addr = self.server_socket.accept()
+                client_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                 print(f"✅ Client connected from {addr}")
                 # Handle each client in a separate thread
                 t = threading.Thread(target=self._handle_client,
@@ -140,7 +144,7 @@ class ModelServer:
                     chunks = []
                     remaining = msg_length
                     while remaining > 0:
-                        chunk = client_socket.recv(min(remaining, 4096))
+                        chunk = client_socket.recv(min(remaining, SOCKET_CHUNK_SIZE))
                         if not chunk:
                             raise ConnectionError("Incomplete data received")
                         chunks.append(chunk)

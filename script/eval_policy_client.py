@@ -50,6 +50,19 @@ import json
 from typing import Any
 import base64
 
+SOCKET_CHUNK_SIZE = 1 << 20
+
+
+def as_bool(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return bool(value)
+
+
 class NumpyEncoder(json.JSONEncoder):
     """Enhanced json encoder for numpy types with array reconstruction info"""
     def default(self, obj):
@@ -146,6 +159,7 @@ class ModelClient:
         while attempts < max_attempts:
             try:
                 self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                 self.sock.settimeout(self.timeout)
                 self.sock.connect((self.host, self.port))
                 print(f"🔗 Connected to model server at {self.host}:{self.port}")
@@ -194,7 +208,7 @@ class ModelClient:
         chunks = []
         received = 0
         while received < size:
-            chunk = self.sock.recv(min(size - received, 4096))
+            chunk = self.sock.recv(min(size - received, SOCKET_CHUNK_SIZE))
             if not chunk:
                 raise ConnectionError("Incomplete response received")
             chunks.append(chunk)
@@ -245,6 +259,15 @@ def main(usr_args):
 
     with open(f"./task_config/{task_config}.yml", "r", encoding="utf-8") as f:
         args = yaml.load(f.read(), Loader=yaml.FullLoader)
+
+    task_config_overrides = {
+        "eval_video_log": as_bool,
+        "render_freq": int,
+        "clear_cache_freq": int,
+    }
+    for key, caster in task_config_overrides.items():
+        if key in usr_args and usr_args[key] is not None:
+            args[key] = caster(usr_args[key])
 
     args['task_name'] = task_name
     args["task_config"] = task_config
@@ -327,7 +350,7 @@ def main(usr_args):
 
     st_seed = 100000 * (1 + seed)
     suc_nums = []
-    test_num = 100
+    test_num = int(usr_args.get("test_num", 100))
     topk = 1
 
     # model = get_model(usr_args)
@@ -340,6 +363,7 @@ def main(usr_args):
                                    test_num=test_num,
                                    video_size=video_size,
                                    instruction_type=instruction_type,
+                                   expert_check=as_bool(usr_args.get("expert_check", True)),
                                    policy_conda_env=policy_conda_env)
     suc_nums.append(suc_num)
 
@@ -364,11 +388,12 @@ def eval_policy(task_name,
                 test_num=100,
                 video_size=None,
                 instruction_type=None,
+                expert_check=True,
                 policy_conda_env=None):
     print(f"\033[34mTask Name: {args['task_name']}\033[0m")
     print(f"\033[34mPolicy Name: {args['policy_name']}\033[0m")
 
-    expert_check = True
+    expert_check = as_bool(expert_check)
     TASK_ENV.suc = 0
     TASK_ENV.test_num = 0
 
@@ -424,8 +449,15 @@ def eval_policy(task_name,
         args["render_freq"] = render_freq
 
         TASK_ENV.setup_demo(now_ep_num=now_id, seed=now_seed, is_test=True, **args)
+        if not expert_check:
+            episode_info = getattr(TASK_ENV, "info", {"info": {}})
         episode_info_list = [episode_info["info"]]
         results = generate_episode_descriptions(args["task_name"], episode_info_list, test_num)
+        if not results or instruction_type not in results[0] or not results[0][instruction_type]:
+            raise RuntimeError(
+                f"No '{instruction_type}' instruction generated for task '{args['task_name']}'. "
+                "Set ROBOTWIN_EXPERT_CHECK=true if this task needs play_once() to populate episode info."
+            )
         instruction = np.random.choice(results[0][instruction_type])
         TASK_ENV.set_instruction(instruction=instruction)  # set language instruction
 

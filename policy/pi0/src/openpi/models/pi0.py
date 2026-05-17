@@ -75,6 +75,7 @@ class Pi0Config(_model.BaseModelConfig):
     max_token_len: int = 48
     predict_mode_ratio: bool = False
     mode_ratio_use_aux_token: bool = False
+    mode_ratio_use_prefix_aux_token: bool = False
     mode_ratio_num_modes: int = 6
     mode_ratio_ratio_dim: int = 3
     mode_ratio_hidden_dim: int = 128
@@ -200,6 +201,9 @@ class Pi0(_model.BaseModel):
 
         self.predict_mode_ratio = config.predict_mode_ratio
         self.mode_ratio_use_aux_token = config.predict_mode_ratio and config.mode_ratio_use_aux_token
+        self.mode_ratio_use_prefix_aux_token = config.predict_mode_ratio and config.mode_ratio_use_prefix_aux_token
+        if self.mode_ratio_use_aux_token and self.mode_ratio_use_prefix_aux_token:
+            raise ValueError("mode_ratio_use_aux_token and mode_ratio_use_prefix_aux_token cannot both be true.")
         self.mode_loss_weight = config.mode_loss_weight
         self.ratio_loss_weight = config.ratio_loss_weight
         if self.mode_ratio_use_aux_token:
@@ -209,9 +213,17 @@ class Pi0(_model.BaseModel):
                     (1, 1, action_expert_config.width),
                     dtype=jnp.float32,
                 ) * 0.02)
+        if self.mode_ratio_use_prefix_aux_token:
+            self.mode_ratio_prefix_aux_token = nnx.Param(
+                jax.random.normal(
+                    rngs.params(),
+                    (1, 1, paligemma_config.width),
+                    dtype=jnp.float32,
+                ) * 0.02)
         if self.predict_mode_ratio:
+            aux_head_in_features = paligemma_config.width if self.mode_ratio_use_prefix_aux_token else action_expert_config.width
             self.aux_head = CTSAuxHead(
-                action_expert_config.width,
+                aux_head_in_features,
                 num_modes=config.mode_ratio_num_modes,
                 num_ratios=config.mode_ratio_ratio_dim,
                 hidden_dim=config.mode_ratio_hidden_dim,
@@ -245,6 +257,15 @@ class Pi0(_model.BaseModel):
             input_mask.append(obs.tokenized_prompt_mask)
             # full attention between image and language inputs
             ar_mask += [False] * tokenized_inputs.shape[1]
+        if self.mode_ratio_use_prefix_aux_token:
+            aux_token = jnp.broadcast_to(
+                self.mode_ratio_prefix_aux_token.value.astype(tokens[-1].dtype),
+                (tokens[-1].shape[0], 1, tokens[-1].shape[-1]),
+            )
+            tokens.append(aux_token)
+            input_mask.append(jnp.ones(aux_token.shape[:2], dtype=jnp.bool_))
+            # Keep the aux token in the bidirectional image/language prefix block.
+            ar_mask += [False]
         tokens = jnp.concatenate(tokens, axis=1)
         input_mask = jnp.concatenate(input_mask, axis=1)
         ar_mask = jnp.array(ar_mask)
@@ -322,8 +343,12 @@ class Pi0(_model.BaseModel):
                                                          positions=positions)
         v_t = self.action_out_proj(suffix_out[:, -self.action_horizon:])
 
-        aux_hidden_index = 1 if self.mode_ratio_use_aux_token else 0
-        return jnp.mean(jnp.square(v_t - u_t), axis=-1), suffix_out[:, aux_hidden_index]
+        if self.mode_ratio_use_prefix_aux_token:
+            aux_hidden = prefix_out[:, -1]
+        else:
+            aux_hidden_index = 1 if self.mode_ratio_use_aux_token else 0
+            aux_hidden = suffix_out[:, aux_hidden_index]
+        return jnp.mean(jnp.square(v_t - u_t), axis=-1), aux_hidden
 
     @override
     def compute_loss(self,
