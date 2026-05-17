@@ -157,7 +157,7 @@ run_eval() {
     PYTHONWARNINGS=ignore::UserWarning "${cmd[@]}"
 }
 
-if [[ "${run_all_tasks}" == "true" || "${run_all_tasks}" == "--all-tasks" || "${run_all_tasks}" == "--coupled-tasks" || "${run_all_tasks}" == "--coupled" ]]; then
+if [[ "${run_all_tasks}" == "true" || "${run_all_tasks}" == "--all-tasks" || "${run_all_tasks}" == "--coupled-tasks" || "${run_all_tasks}" == "--coupled" || "${run_all_tasks}" == "--uncoordinated-tasks" || "${run_all_tasks}" == "--uncoordinated" ]]; then
     task_group="all_tasks"
     summary_group="_all_tasks"
 
@@ -189,6 +189,44 @@ if [[ "${run_all_tasks}" == "true" || "${run_all_tasks}" == "--all-tasks" || "${
             scan_object
             grab_roller
             lift_pot
+        )
+    elif [[ "${run_all_tasks}" == "--uncoordinated-tasks" || "${run_all_tasks}" == "--uncoordinated" ]]; then
+        task_group="uncoordinated_tasks"
+        summary_group="_uncoordinated_tasks"
+        all_task_names=(
+            adjust_bottle
+            beat_block_hammer
+            blocks_ranking_rgb
+            blocks_ranking_size
+            click_alarmclock
+            click_bell
+            move_can_pot
+            move_pillbottle_pad
+            move_playingcard_away
+            move_stapler_pad
+            open_laptop
+            open_microwave
+            place_a2b_left
+            place_a2b_right
+            place_bread_skillet
+            place_container_plate
+            place_empty_cup
+            place_fan
+            place_mouse_pad
+            place_object_scale
+            place_object_stand
+            place_phone_stand
+            place_shoe
+            press_stapler
+            rotate_qrcode
+            shake_bottle
+            shake_bottle_horizontally
+            stack_blocks_three
+            stack_blocks_two
+            stack_bowls_three
+            stack_bowls_two
+            stamp_seal
+            turn_switch
         )
     fi
 
@@ -238,3 +276,4 @@ fi
 # bash eval_client.sh grab_roller demo_clean pi0_base_aloha_robotwin_full_chunk_delta_position_10d_action_grab_roller-aloha-agilex_clean_50 grab_roller-aloha-agilex_clean_50-50-10d_action ee_10d 0 0 127.0.0.1 1234
 # bash eval_client.sh placeholder demo_clean pi0_base_aloha_robotwin_full_50_tasks_clean_cts_10d_action multi_clean_50-cts-10d_action ee_10d 0 127.0.0.1 1234 --all-tasks
 # bash eval_client.sh placeholder demo_clean pi0_base_aloha_robotwin_full_50_tasks_clean_cts_10d_action multi_clean_50-cts-10d_action ee_10d 0 127.0.0.1 1234 --coupled-tasks
+# bash eval_client.sh placeholder demo_clean pi0_base_aloha_robotwin_full_50_tasks_clean_cts_10d_action multi_clean_50-cts-10d_action ee_10d 0 127.0.0.1 1234 --uncoordinated-tasks
