@@ -27,6 +27,15 @@ parent_directory = os.path.dirname(current_file_path)
 #os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 #os.environ["VK_ICD_FILENAMES"] = '/usr/share/vulkan/icd.d/nvidia_icd.json'
 
+def as_bool(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return bool(value)
+
 def class_decorator(task_name):
     envs_module = importlib.import_module(f"envs.{task_name}")
     try:
@@ -71,7 +80,7 @@ def main(usr_args):
     # checkpoint_num = usr_args['checkpoint_num']
     policy_name = usr_args["policy_name"]
     action_dim = usr_args["action_dim"]
-    mode = usr_args["mode"]
+    mode = usr_args.get("mode", "qpos")
     instruction_type = usr_args["instruction_type"]
     save_dir = None
     video_save_dir = None
@@ -81,6 +90,15 @@ def main(usr_args):
 
     with open(f"./task_config/{task_config}.yml", "r", encoding="utf-8") as f:
         args = yaml.load(f.read(), Loader=yaml.FullLoader)
+
+    task_config_overrides = {
+        "eval_video_log": as_bool,
+        "render_freq": int,
+        "clear_cache_freq": int,
+    }
+    for key, caster in task_config_overrides.items():
+        if key in usr_args and usr_args[key] is not None:
+            args[key] = caster(usr_args[key])
 
     args['task_name'] = task_name
     args["task_config"] = task_config
@@ -165,7 +183,7 @@ def main(usr_args):
 
     st_seed = 100000 * (1 + seed)
     suc_nums = []
-    test_num = 100
+    test_num = int(usr_args.get("test_num", 100))
     topk = 1
 
     model = get_model(usr_args)
@@ -176,7 +194,8 @@ def main(usr_args):
                                    st_seed,
                                    test_num=test_num,
                                    video_size=video_size,
-                                   instruction_type=instruction_type)
+                                   instruction_type=instruction_type,
+                                   expert_check=as_bool(usr_args.get("expert_check", True)))
     suc_nums.append(suc_num)
 
     topk_success_rate = sorted(suc_nums, reverse=True)[:topk]
@@ -199,12 +218,12 @@ def eval_policy(task_name,
                 st_seed,
                 test_num=100,
                 video_size=None,
-                instruction_type=None):
+                instruction_type=None,
+                expert_check=True):
     print(f"\033[34mTask Name: {args['task_name']}\033[0m")
     print(f"\033[34mPolicy Name: {args['policy_name']}\033[0m")
 
-    expert_check = True
-    #expert_check = False
+    expert_check = as_bool(expert_check)
     TASK_ENV.suc = 0
     TASK_ENV.test_num = 0
 
@@ -266,6 +285,8 @@ def eval_policy(task_name,
         args["render_freq"] = render_freq
 
         TASK_ENV.setup_demo(now_ep_num=now_id, seed=now_seed, is_test=True, **args)
+        if not expert_check:
+            episode_info = getattr(TASK_ENV, "info", {"info": {}})
         episode_info_list = [episode_info["info"]]
         results = generate_episode_descriptions(args["task_name"], episode_info_list, test_num)
         instruction = np.random.choice(results[0][instruction_type])

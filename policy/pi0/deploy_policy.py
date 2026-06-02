@@ -164,7 +164,7 @@ def get_model(usr_args):
 
 
 def eval(TASK_ENV, model, observation):
-    action_type = "cts_10d"
+    action_type = os.environ.get("PI0_ACTION_TYPE", "cts_10d")
     
     if action_type == "ee":
         #if model.observation_window is None:

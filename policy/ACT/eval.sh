@@ -8,6 +8,10 @@ ckpt_setting=${3}
 expert_data_num=${4}
 seed=${5}
 gpu_id=${6}
+mode=${7:-qpos}
+test_num=${8:-100}
+expert_check=${9:-true}
+ckpt_name=${10:-policy_last.ckpt}
 # temporal_agg=${5} # use temporal_agg
 DEBUG=False
 
@@ -24,4 +28,8 @@ python script/eval_policy.py --config policy/$policy_name/deploy_policy.yml \
     --ckpt_setting ${ckpt_setting} \
     --ckpt_dir policy/ACT/act_ckpt/act-${task_name}/${ckpt_setting}-${expert_data_num} \
     --seed ${seed} \
+    --mode ${mode} \
+    --test_num ${test_num} \
+    --expert_check ${expert_check} \
+    --ckpt_name ${ckpt_name} \
     --temporal_agg true

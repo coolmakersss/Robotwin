@@ -1073,6 +1073,194 @@ _CONFIGS = [
         fsdp_devices=1,
     ),
 
+    TrainConfig(
+        name="pi0_base_aloha_realworld_sweep_table_10d_action",
+        model=pi0.Pi0Config(),
+        data=LeRobotAlohaDataConfig(
+            repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/sweep_table-realworld-10d_action",
+            raw_action_dim=20,
+            adapt_to_pi=False,
+            use_delta_joint_actions=True,
+            delta_action_mask=_transforms.make_bool_mask(3, -7, 3, -7),
+            repack_transforms=_transforms.Group(inputs=[
+                _transforms.RepackTransform({
+                    "images": {
+                        "cam_high": "observation.images.cam_high",
+                        "cam_left_wrist": "observation.images.cam_left_wrist",
+                        "cam_right_wrist": "observation.images.cam_right_wrist",
+                    },
+                    "state": "observation.state",
+                    "actions": "action",
+                    "prompt": "prompt",
+                })
+            ]),
+            base_config=DataConfig(
+                local_files_only=True,
+                prompt_from_task=True,
+            ),
+        ),
+        freeze_filter=pi0.Pi0Config().get_freeze_filter(),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "s3://openpi-assets/checkpoints/pi0_base/params"
+        ),
+        batch_size=128,
+        num_workers=16,
+        save_interval=5000,
+        num_train_steps=30000,
+        fsdp_devices=1,
+    ),
+
+    TrainConfig(
+        name="pi0_base_aloha_realworld_multi_10d_action",
+        model=pi0.Pi0Config(),
+        data=LeRobotAlohaDataConfig(
+            repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/multi-realworld-10d_action",
+            raw_action_dim=20,
+            adapt_to_pi=False,
+            use_delta_joint_actions=True,
+            delta_action_mask=_transforms.make_bool_mask(3, -7, 3, -7),
+            repack_transforms=_transforms.Group(inputs=[
+                _transforms.RepackTransform({
+                    "images": {
+                        "cam_high": "observation.images.cam_high",
+                        "cam_left_wrist": "observation.images.cam_left_wrist",
+                        "cam_right_wrist": "observation.images.cam_right_wrist",
+                    },
+                    "state": "observation.state",
+                    "actions": "action",
+                    "prompt": "prompt",
+                })
+            ]),
+            base_config=DataConfig(
+                local_files_only=True,
+                prompt_from_task=True,
+            ),
+        ),
+        freeze_filter=pi0.Pi0Config().get_freeze_filter(),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "s3://openpi-assets/checkpoints/pi0_base/params"
+        ),
+        batch_size=128,
+        num_workers=16,
+        save_interval=10000,
+        num_train_steps=100000,
+        fsdp_devices=1,
+    ),
+
+    TrainConfig(
+        name="pi0_base_aloha_realworld_multi_cts_10d_action",
+        model=pi0.Pi0Config(),
+        data=LeRobotAlohaDataConfig(
+            repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/multi-realworld-cts-10d_action",
+            raw_action_dim=20,
+            adapt_to_pi=False,
+            use_delta_joint_actions=True,
+            delta_action_mask=_transforms.make_bool_mask(3, -7, 3, -7),
+            repack_transforms=_transforms.Group(inputs=[
+                _transforms.RepackTransform({
+                    "images": {
+                        "cam_high": "observation.images.cam_high",
+                        "cam_left_wrist": "observation.images.cam_left_wrist",
+                        "cam_right_wrist": "observation.images.cam_right_wrist",
+                    },
+                    "state": "observation.state",
+                    "actions": "action",
+                    "prompt": "prompt",
+                })
+            ]),
+            base_config=DataConfig(
+                local_files_only=True,
+                prompt_from_task=True,
+            ),
+        ),
+        freeze_filter=pi0.Pi0Config().get_freeze_filter(),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "s3://openpi-assets/checkpoints/pi0_base/params"
+        ),
+        batch_size=128,
+        num_workers=16,
+        save_interval=10000,
+        num_train_steps=100000,
+        fsdp_devices=1,
+    ),
+
+    TrainConfig(
+        name="pi0_base_aloha_realworld_multi_cts_10d_action_mode_ratio_prefix_aux_token",
+        model=pi0.Pi0Config(predict_mode_ratio=True, mode_ratio_use_prefix_aux_token=True),
+        data=LeRobotAlohaDataConfig(
+            repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/multi-realworld-cts-10d_action-mode-ratio",
+            raw_action_dim=20,
+            adapt_to_pi=False,
+            use_delta_joint_actions=True,
+            delta_action_mask=_transforms.make_bool_mask(3, -7, 3, -7),
+            repack_transforms=_transforms.Group(inputs=[
+                _transforms.RepackTransform({
+                    "images": {
+                        "cam_high": "observation.images.cam_high",
+                        "cam_left_wrist": "observation.images.cam_left_wrist",
+                        "cam_right_wrist": "observation.images.cam_right_wrist",
+                    },
+                    "state": "observation.state",
+                    "actions": "action",
+                    "prompt": "prompt",
+                    "mode": "mode",
+                    "ratio": "ratio",
+                })
+            ]),
+            base_config=DataConfig(
+                local_files_only=True,
+                prompt_from_task=True,
+                aux_target_keys=("mode", "ratio"),
+            ),
+        ),
+        freeze_filter=pi0.Pi0Config(predict_mode_ratio=True, mode_ratio_use_prefix_aux_token=True).get_freeze_filter(),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "s3://openpi-assets/checkpoints/pi0_base/params"
+        ),
+        batch_size=128,
+        num_workers=16,
+        save_interval=10000,
+        num_train_steps=100000,
+        fsdp_devices=1,
+    ),
+
+    TrainConfig(
+        name="pi0_base_aloha_robomimic_transport_10d_action",
+        model=pi0.Pi0Config(),
+        data=LeRobotAlohaDataConfig(
+            repo_id="/mnt/afs/huangdi/xiangenda/.cache/huggingface/lerobot/multi-robomimic-transport-10d_action",
+            raw_action_dim=20,
+            adapt_to_pi=False,
+            use_delta_joint_actions=True,
+            delta_action_mask=_transforms.make_bool_mask(3, -7, 3, -7),
+            repack_transforms=_transforms.Group(inputs=[
+                _transforms.RepackTransform({
+                    "images": {
+                        "cam_high": "observation.images.cam_high",
+                        "cam_left_wrist": "observation.images.cam_left_wrist",
+                        "cam_right_wrist": "observation.images.cam_right_wrist",
+                    },
+                    "state": "observation.state",
+                    "actions": "action",
+                    "prompt": "prompt",
+                })
+            ]),
+            base_config=DataConfig(
+                local_files_only=True,
+                prompt_from_task=True,
+            ),
+        ),
+        freeze_filter=pi0.Pi0Config().get_freeze_filter(),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "s3://openpi-assets/checkpoints/pi0_base/params"
+        ),
+        batch_size=64,
+        num_workers=16,
+        save_interval=10000,
+        num_train_steps=50000,
+        fsdp_devices=1,
+    ),
+
     # pi0_fast_base by full
     TrainConfig(
         name="pi0_fast_aloha_robotwin_full",

@@ -10,12 +10,15 @@ model_name=${4}
 seed=${5}
 gpu_id=${6}
 server_port=${7:-1234}
+fast_tokenizer_path=${8:-${OPENPI_FAST_TOKENIZER_PATH:-/mnt/afs/huangdi/xiangenda/RoboTwin/policy/pi0/fast/fast_tokenizer_10d_action}}
 
 export CUDA_VISIBLE_DEVICES=${gpu_id}
 export OPENPI_DATA_HOME=${OPENPI_DATA_HOME:-$HOME/.cache/openpi}
+export OPENPI_FAST_TOKENIZER_PATH=${fast_tokenizer_path}
 echo -e "\033[33mgpu id (to use): ${gpu_id}\033[0m"
 echo -e "\033[33mserver port: ${server_port}\033[0m"
 echo -e "\033[33mopenpi cache dir: ${OPENPI_DATA_HOME}\033[0m"
+echo -e "\033[33mFAST tokenizer: ${OPENPI_FAST_TOKENIZER_PATH}\033[0m"
 
 OPENPI_PYTHON=/mnt/afs/huangdi/xiangenda/.venv/bin/python
 cd ../.. # move to root
