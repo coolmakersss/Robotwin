@@ -18,15 +18,40 @@ from datetime import datetime
 import importlib
 import argparse
 import pdb
-import random
 
 from generate_episode_instructions import *
 
+
+import sys
+import os
+import subprocess
+import socket
+import json
+import threading
+import time
+import random
+import traceback
+import yaml
+from datetime import datetime
+import importlib
+import argparse
+from pathlib import Path
+from collections import deque
+
+import numpy as np
+import json
+from typing import Any
+
 current_file_path = os.path.abspath(__file__)
 parent_directory = os.path.dirname(current_file_path)
-#os.environ['DISPLAY'] = '' 
-#os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-#os.environ["VK_ICD_FILENAMES"] = '/usr/share/vulkan/icd.d/nvidia_icd.json'
+
+import numpy as np
+import json
+from typing import Any
+import base64
+
+SOCKET_CHUNK_SIZE = 1 << 20
+
 
 def as_bool(value):
     if isinstance(value, bool):
@@ -36,6 +61,11 @@ def as_bool(value):
     if isinstance(value, str):
         return value.strip().lower() in {"1", "true", "yes", "y", "on"}
     return bool(value)
+
+
+_yanshou_noise_seed = os.environ.get("YANSHOU_EEF_NOISE_SEED", os.environ.get("ROBOTWIN_DETERMINISTIC_SEED"))
+_YH_NOISE_RNG = np.random.default_rng(None if _yanshou_noise_seed is None else int(_yanshou_noise_seed))
+
 
 def set_deterministic_seed(seed):
     seed = int(os.environ.get("ROBOTWIN_DETERMINISTIC_SEED", seed))
@@ -50,6 +80,167 @@ def set_deterministic_seed(seed):
         pass
     return seed
 
+
+def _env_float(name, default):
+    try:
+        return float(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _yanshou_eef_noise_enabled(func_name):
+    action_type = os.environ.get("PI0_ACTION_TYPE", "cts_10d").strip().lower()
+    enabled = as_bool(os.environ.get("YANSHOU_EEF_NOISE_ENABLED", "true"))
+    eef_action_types = {"ee", "eef", "ee_10d", "eef_10d"}
+    return enabled and func_name == "infer_action" and action_type in eef_action_types
+
+
+def _add_yanshou_eef_noise(actions):
+    actions_arr = np.asarray(actions)
+    if not np.issubdtype(actions_arr.dtype, np.number):
+        return actions
+
+    noise_prob = _env_float("YANSHOU_EEF_NOISE_PROB", 0.25)
+    if noise_prob <= 0 or _YH_NOISE_RNG.random() > noise_prob:
+        return actions
+
+    original_dtype = actions_arr.dtype
+    noisy = actions_arr.astype(np.float32, copy=True)
+    flat = noisy.reshape(-1, noisy.shape[-1])
+    action_dim = flat.shape[-1]
+
+    pos_std = _env_float("YANSHOU_EEF_POS_NOISE_STD", 0.01)
+    rot_std = _env_float("YANSHOU_EEF_ROT_NOISE_STD", 0.02)
+    gripper_std = _env_float("YANSHOU_EEF_GRIPPER_NOISE_STD", 0.05)
+    all_std = _env_float("YANSHOU_EEF_ALL_NOISE_STD", 0.01)
+
+    if action_dim >= 20:
+        flat[:, 0:3] += _YH_NOISE_RNG.normal(0.0, pos_std, size=flat[:, 0:3].shape)
+        flat[:, 10:13] += _YH_NOISE_RNG.normal(0.0, pos_std, size=flat[:, 10:13].shape)
+        flat[:, 3:9] += _YH_NOISE_RNG.normal(0.0, rot_std, size=flat[:, 3:9].shape)
+        flat[:, 13:19] += _YH_NOISE_RNG.normal(0.0, rot_std, size=flat[:, 13:19].shape)
+        flat[:, 9:10] += _YH_NOISE_RNG.normal(0.0, gripper_std, size=flat[:, 9:10].shape)
+        flat[:, 19:20] += _YH_NOISE_RNG.normal(0.0, gripper_std, size=flat[:, 19:20].shape)
+    elif action_dim >= 16:
+        flat[:, 0:3] += _YH_NOISE_RNG.normal(0.0, pos_std, size=flat[:, 0:3].shape)
+        flat[:, 8:11] += _YH_NOISE_RNG.normal(0.0, pos_std, size=flat[:, 8:11].shape)
+        flat[:, 3:7] += _YH_NOISE_RNG.normal(0.0, rot_std, size=flat[:, 3:7].shape)
+        flat[:, 11:15] += _YH_NOISE_RNG.normal(0.0, rot_std, size=flat[:, 11:15].shape)
+        flat[:, 7:8] += _YH_NOISE_RNG.normal(0.0, gripper_std, size=flat[:, 7:8].shape)
+        flat[:, 15:16] += _YH_NOISE_RNG.normal(0.0, gripper_std, size=flat[:, 15:16].shape)
+    else:
+        flat += _YH_NOISE_RNG.normal(0.0, all_std, size=flat.shape)
+
+    print(
+        "[yanshou] added eef action noise "
+        f"(dim={action_dim}, pos_std={pos_std}, rot_std={rot_std}, gripper_std={gripper_std})"
+    )
+    return noisy.astype(original_dtype, copy=False)
+
+
+def _load_static_instruction(task_name, instruction_type, episode_index, args):
+    robotwin_root = Path(parent_directory).parent
+    data_root = robotwin_root / "data" / task_name
+    setting_candidates = [
+        os.environ.get("ROBOTWIN_INSTRUCTION_SETTING"),
+        args.get("instruction_setting"),
+        args.get("data_setting"),
+        args.get("ckpt_setting"),
+        args.get("task_config"),
+    ]
+
+    candidate_paths = []
+    seen_settings = set()
+    for setting in setting_candidates:
+        if not setting or setting in seen_settings:
+            continue
+        seen_settings.add(setting)
+        candidate_paths.append(data_root / setting / "instructions" / f"episode{episode_index}.json")
+        candidate_paths.append(data_root / setting / "instructions" / "episode0.json")
+
+    if data_root.exists():
+        candidate_paths.extend(sorted(data_root.glob(f"*/instructions/episode{episode_index}.json")))
+        candidate_paths.extend(sorted(data_root.glob("*/instructions/episode0.json")))
+
+    seen_paths = set()
+    for path in candidate_paths:
+        if path in seen_paths or not path.is_file():
+            continue
+        seen_paths.add(path)
+        with open(path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        instructions = (
+            payload.get(instruction_type)
+            or payload.get("seen")
+            or payload.get("instructions")
+            or payload.get("unseen")
+            or []
+        )
+        if instructions:
+            instruction = np.random.choice(instructions)
+            print(f"Loaded fallback instruction from {path}")
+            return instruction
+
+    return None
+
+
+def _choose_instruction(task_name, instruction_type, episode_index, generated_results, args):
+    if generated_results and instruction_type in generated_results[0] and generated_results[0][instruction_type]:
+        return np.random.choice(generated_results[0][instruction_type])
+
+    instruction = _load_static_instruction(task_name, instruction_type, episode_index, args)
+    if instruction is not None:
+        return instruction
+
+    raise RuntimeError(
+        f"No '{instruction_type}' instruction generated or loaded for task '{task_name}'. "
+        "Try EXPERT_CHECK=true or set INSTRUCTION_SETTING to a data setting with instructions."
+    )
+
+
+class NumpyEncoder(json.JSONEncoder):
+    """Enhanced json encoder for numpy types with array reconstruction info"""
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            if obj.dtype == np.float32:
+                dtype = 'float32'
+            elif obj.dtype == np.float64:
+                dtype = 'float64'
+            elif obj.dtype == np.int32:
+                dtype = 'int32'
+            elif obj.dtype == np.int64:
+                dtype = 'int64'
+            else:
+                dtype = str(obj.dtype)
+            
+            return {
+                '__numpy_array__': True,
+                'data': base64.b64encode(obj.tobytes()).decode('ascii'),
+                'dtype': dtype,
+                'shape': obj.shape
+            }
+        elif isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.bool_):
+            return bool(obj)
+        return super().default(obj)
+
+def numpy_to_json(data: Any) -> str:
+    """Convert numpy-containing data to JSON string with reconstruction info"""
+    return json.dumps(data, cls=NumpyEncoder)
+
+def json_to_numpy(json_str: str) -> Any:
+    """Convert JSON string back to Python objects with numpy arrays"""
+    def object_hook(dct):
+        if '__numpy_array__' in dct:
+            data = base64.b64decode(dct['data'])
+            return np.frombuffer(data, dtype=dct['dtype']).reshape(dct['shape'])
+        return dct
+    
+    return json.loads(json_str, object_hook=object_hook)
+
 def class_decorator(task_name):
     envs_module = importlib.import_module(f"envs.{task_name}")
     try:
@@ -60,12 +251,14 @@ def class_decorator(task_name):
     return env_instance
 
 
-def eval_function_decorator(policy_name, model_name):
+def eval_function_decorator(policy_name, model_name, conda_env=None):
+    # conda_env is abandoned
     try:
         policy_model = importlib.import_module(policy_name)
         return getattr(policy_model, model_name)
     except ImportError as e:
         raise e
+
 
 def get_camera_config(camera_type):
     camera_config_path = os.path.join(parent_directory, "../task_config/_camera_config.yml")
@@ -85,22 +278,122 @@ def get_embodiment_config(robot_file):
         embodiment_args = yaml.load(f.read(), Loader=yaml.FullLoader)
     return embodiment_args
 
+class ModelClient:
+    def __init__(self, host='180.184.148.133', port=60913, timeout=30):
+        self.host = host
+        self.port = port
+        self.timeout = timeout
+        self.sock = None
+        self._connect()
+
+    def _connect(self):
+        attempts = 0
+        max_attempts = 1000
+        retry_delay = 5
+        
+        while attempts < max_attempts:
+            try:
+                self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                self.sock.settimeout(self.timeout)
+                self.sock.connect((self.host, self.port))
+                print(f"🔗 Connected to model server at {self.host}:{self.port}")
+                return
+            except Exception as e:
+                attempts += 1
+                if self.sock:
+                    self.sock.close()
+                if attempts < max_attempts:
+                    print(f"⚠️ Connection attempt {attempts} failed: {str(e)}")
+                    print(f"🔄 Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                else:
+                    raise ConnectionError(
+                        f"Failed to connect to server after {max_attempts} attempts: {str(e)}"
+                    )
+
+    def _send_recv(self, data):
+        """Send request and receive response with numpy array support"""
+        try:
+            # Serialize with numpy support
+            json_data = numpy_to_json(data).encode('utf-8')
+            
+            # Send data length and data
+            self.sock.sendall(len(json_data).to_bytes(4, 'big'))
+            self.sock.sendall(json_data)
+            
+            # Receive and deserialize response
+            response = self._recv_response()
+            return response
+            
+        except Exception as e:
+            self.close()
+            raise ConnectionError(f"Communication error: {str(e)}")
+
+    def _recv_response(self):
+        """Receive response with numpy array reconstruction"""
+        # Read response length
+        len_data = self.sock.recv(4)
+        if not len_data:
+            raise ConnectionError("Connection closed by server")
+        
+        size = int.from_bytes(len_data, 'big')
+        
+        # Read complete response
+        chunks = []
+        received = 0
+        while received < size:
+            chunk = self.sock.recv(min(size - received, SOCKET_CHUNK_SIZE))
+            if not chunk:
+                raise ConnectionError("Incomplete response received")
+            chunks.append(chunk)
+            received += len(chunk)
+        
+        # Deserialize with numpy reconstruction
+        return json_to_numpy(b''.join(chunks).decode('utf-8'))
+
+    def call(self, func_name=None, obs=None):
+        response = self._send_recv({"cmd": func_name, "obs": obs})
+        result = response['res']
+        if _yanshou_eef_noise_enabled(func_name):
+            result = _add_yanshou_eef_noise(result)
+        return result
+
+    def close(self):
+        """Close the connection"""
+        if self.sock:
+            try:
+                self.sock.close()
+            except:
+                pass
+            finally:
+                self.sock = None
+                print("🔌 Connection closed")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
 
 def main(usr_args):
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    current_time = usr_args.get("save_timestamp") or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     task_name = usr_args["task_name"]
     task_config = usr_args["task_config"]
     ckpt_setting = usr_args["ckpt_setting"]
     # checkpoint_num = usr_args['checkpoint_num']
     policy_name = usr_args["policy_name"]
-    action_dim = usr_args["action_dim"]
-    mode = usr_args.get("mode", "qpos")
     instruction_type = usr_args["instruction_type"]
+    host = usr_args["host"]
+    port = usr_args["port"]
     save_dir = None
     video_save_dir = None
     video_size = None
 
-    get_model = eval_function_decorator(policy_name, "get_model")
+    policy_conda_env = usr_args.get("policy_conda_env", None)
+
+    get_model = eval_function_decorator(policy_name, "get_model", conda_env=policy_conda_env)
 
     with open(f"./task_config/{task_config}.yml", "r", encoding="utf-8") as f:
         args = yaml.load(f.read(), Loader=yaml.FullLoader)
@@ -117,8 +410,6 @@ def main(usr_args):
     args['task_name'] = task_name
     args["task_config"] = task_config
     args["ckpt_setting"] = ckpt_setting
-    args["action_dim"] = action_dim
-    args["mode"] = mode
 
     embodiment_type = args.get("embodiment")
     embodiment_config_path = os.path.join(CONFIGS_PATH, "_embodiment_config.yml")
@@ -200,7 +491,8 @@ def main(usr_args):
     test_num = int(usr_args.get("test_num", 100))
     topk = 1
 
-    model = get_model(usr_args)
+    # model = get_model(usr_args)
+    model = ModelClient(host=host, port=port)
     st_seed, suc_num = eval_policy(task_name,
                                    TASK_ENV,
                                    args,
@@ -209,7 +501,8 @@ def main(usr_args):
                                    test_num=test_num,
                                    video_size=video_size,
                                    instruction_type=instruction_type,
-                                   expert_check=as_bool(usr_args.get("expert_check", True)))
+                                   expert_check=as_bool(usr_args.get("expert_check", True)),
+                                   policy_conda_env=policy_conda_env)
     suc_nums.append(suc_num)
 
     topk_success_rate = sorted(suc_nums, reverse=True)[:topk]
@@ -233,7 +526,8 @@ def eval_policy(task_name,
                 test_num=100,
                 video_size=None,
                 instruction_type=None,
-                expert_check=True):
+                expert_check=True,
+                policy_conda_env=None):
     print(f"\033[34mTask Name: {args['task_name']}\033[0m")
     print(f"\033[34mPolicy Name: {args['policy_name']}\033[0m")
 
@@ -246,8 +540,7 @@ def eval_policy(task_name,
     suc_test_seed_list = []
 
     policy_name = args["policy_name"]
-    eval_func = eval_function_decorator(policy_name, "eval")
-    reset_func = eval_function_decorator(policy_name, "reset_model")
+    eval_func = eval_function_decorator(policy_name, "eval", conda_env=policy_conda_env)
 
     now_seed = st_seed
     task_total_reward = 0
@@ -265,51 +558,40 @@ def eval_policy(task_name,
                 episode_info = TASK_ENV.play_once()
                 TASK_ENV.close_env()
             except UnStableError as e:
-                print(f"Skip unstable seed {now_seed} during expert check: {e}")
-                try:
-                    TASK_ENV.close_env()
-                except Exception:
-                    pass
-                now_seed += 1
-                args["render_freq"] = render_freq
-                continue
-            except AssertionError as e:
-                print(f"Skip seed {now_seed} during expert check due to invalid expert action: {e}")
-                try:
-                    TASK_ENV.close_env()
-                except Exception:
-                    pass
-                now_seed += 1
-                args["render_freq"] = render_freq
-                continue
-
-            if not (TASK_ENV.plan_success and TASK_ENV.check_success()):
-                now_seed += 1
-                args["render_freq"] = render_freq
-                continue
-
-        args["render_freq"] = render_freq
-
-        try:
-            TASK_ENV.setup_demo(now_ep_num=now_id, seed=now_seed, is_test=True, **args)
-        except UnStableError as e:
-            print(f"Skip unstable seed {now_seed} during policy eval: {e}")
-            try:
+                print(" -------------")
+                print("Error: ", e)
+                print(" -------------")
                 TASK_ENV.close_env()
-            except Exception:
-                pass
+                now_seed += 1
+                args["render_freq"] = render_freq
+                continue
+            except Exception as e:
+                stack_trace = traceback.format_exc()
+                print(" -------------")
+                print("Error: ", stack_trace)
+                print(" -------------")
+                TASK_ENV.close_env()
+                now_seed += 1
+                args["render_freq"] = render_freq
+                print("error occurs !")
+                continue
+
+        if (not expert_check) or (TASK_ENV.plan_success and TASK_ENV.check_success()):
+            succ_seed += 1
+            suc_test_seed_list.append(now_seed)
+        else:
             now_seed += 1
             args["render_freq"] = render_freq
             continue
 
-        succ_seed += 1
-        suc_test_seed_list.append(now_seed)
+        args["render_freq"] = render_freq
 
+        TASK_ENV.setup_demo(now_ep_num=now_id, seed=now_seed, is_test=True, **args)
         if not expert_check:
             episode_info = getattr(TASK_ENV, "info", {"info": {}})
         episode_info_list = [episode_info["info"]]
         results = generate_episode_descriptions(args["task_name"], episode_info_list, test_num)
-        instruction = np.random.choice(results[0][instruction_type])
+        instruction = _choose_instruction(args["task_name"], instruction_type, now_id, results, args)
         TASK_ENV.set_instruction(instruction=instruction)  # set language instruction
 
         if TASK_ENV.eval_video_path is not None:
@@ -342,7 +624,8 @@ def eval_policy(task_name,
             TASK_ENV._set_eval_video_ffmpeg(ffmpeg)
 
         succ = False
-        reset_func(model)
+        #model.call(func_name='reset_model')
+        model.call(func_name='reset_obsrvationwindows')
         while TASK_ENV.take_action_cnt < TASK_ENV.step_lim:
             observation = TASK_ENV.get_obs()
             eval_func(TASK_ENV, model, observation)
@@ -379,12 +662,17 @@ def eval_policy(task_name,
 
 def parse_args_and_config():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--host", type=str, default="180.184.148.133")
+    parser.add_argument("--port", type=int)
     parser.add_argument("--config", type=str, required=True)
     parser.add_argument("--overrides", nargs=argparse.REMAINDER)
     args = parser.parse_args()
 
     with open(args.config, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
+
+    config['host'] = args.host
+    config['port'] = args.port
 
     # Parse overrides
     def parse_override_pairs(pairs):

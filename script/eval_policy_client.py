@@ -63,6 +63,80 @@ def as_bool(value):
     return bool(value)
 
 
+def set_deterministic_seed(seed):
+    seed = int(os.environ.get("ROBOTWIN_DETERMINISTIC_SEED", seed))
+    random.seed(seed)
+    np.random.seed(seed)
+    try:
+        import torch
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+    except Exception:
+        pass
+    return seed
+
+
+def _load_static_instruction(task_name, instruction_type, episode_index, args):
+    robotwin_root = Path(parent_directory).parent
+    data_root = robotwin_root / "data" / task_name
+    setting_candidates = [
+        os.environ.get("ROBOTWIN_INSTRUCTION_SETTING"),
+        args.get("instruction_setting"),
+        args.get("data_setting"),
+        args.get("ckpt_setting"),
+        args.get("task_config"),
+    ]
+
+    candidate_paths = []
+    seen_settings = set()
+    for setting in setting_candidates:
+        if not setting or setting in seen_settings:
+            continue
+        seen_settings.add(setting)
+        candidate_paths.append(data_root / setting / "instructions" / f"episode{episode_index}.json")
+        candidate_paths.append(data_root / setting / "instructions" / "episode0.json")
+
+    if data_root.exists():
+        candidate_paths.extend(sorted(data_root.glob(f"*/instructions/episode{episode_index}.json")))
+        candidate_paths.extend(sorted(data_root.glob("*/instructions/episode0.json")))
+
+    seen_paths = set()
+    for path in candidate_paths:
+        if path in seen_paths or not path.is_file():
+            continue
+        seen_paths.add(path)
+        with open(path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        instructions = (
+            payload.get(instruction_type)
+            or payload.get("seen")
+            or payload.get("instructions")
+            or payload.get("unseen")
+            or []
+        )
+        if instructions:
+            instruction = np.random.choice(instructions)
+            print(f"Loaded fallback instruction from {path}")
+            return instruction
+
+    return None
+
+
+def _choose_instruction(task_name, instruction_type, episode_index, generated_results, args):
+    if generated_results and instruction_type in generated_results[0] and generated_results[0][instruction_type]:
+        return np.random.choice(generated_results[0][instruction_type])
+
+    instruction = _load_static_instruction(task_name, instruction_type, episode_index, args)
+    if instruction is not None:
+        return instruction
+
+    raise RuntimeError(
+        f"No '{instruction_type}' instruction generated or loaded for task '{task_name}'. "
+        "Try EXPERT_CHECK=true or set INSTRUCTION_SETTING to a data setting with instructions."
+    )
+
+
 class NumpyEncoder(json.JSONEncoder):
     """Enhanced json encoder for numpy types with array reconstruction info"""
     def default(self, obj):
@@ -346,7 +420,7 @@ def main(usr_args):
     usr_args["left_arm_dim"] = len(args["left_embodiment_config"]["arm_joints_name"][0])
     usr_args["right_arm_dim"] = len(args["right_embodiment_config"]["arm_joints_name"][1])
 
-    seed = usr_args["seed"]
+    seed = set_deterministic_seed(usr_args["seed"])
 
     st_seed = 100000 * (1 + seed)
     suc_nums = []
@@ -453,12 +527,7 @@ def eval_policy(task_name,
             episode_info = getattr(TASK_ENV, "info", {"info": {}})
         episode_info_list = [episode_info["info"]]
         results = generate_episode_descriptions(args["task_name"], episode_info_list, test_num)
-        if not results or instruction_type not in results[0] or not results[0][instruction_type]:
-            raise RuntimeError(
-                f"No '{instruction_type}' instruction generated for task '{args['task_name']}'. "
-                "Set ROBOTWIN_EXPERT_CHECK=true if this task needs play_once() to populate episode info."
-            )
-        instruction = np.random.choice(results[0][instruction_type])
+        instruction = _choose_instruction(args["task_name"], instruction_type, now_id, results, args)
         TASK_ENV.set_instruction(instruction=instruction)  # set language instruction
 
         if TASK_ENV.eval_video_path is not None:
